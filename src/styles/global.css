@@ -1,0 +1,389 @@
+/* ============================================================
+   global.css — 전역 디자인 토큰 & 베이스 스타일
+   Somewhere Virtual Café
+   ============================================================ */
+
+/* ── 디자인 토큰 ─────────────────────────────────────────── */
+:root {
+  /* 컬러 팔레트 — 따뜻한 카페 무드 */
+  --cream-50:  #FDFAF4;
+  --cream-100: #F7F0E0;
+  --cream-200: #EDE0C4;
+  --cream-300: #DCC9A0;
+  --brown-400: #C4A06A;
+  --brown-500: #A07840;
+  --brown-600: #7A5A28;
+  --brown-700: #5A3E18;
+  --brown-800: #3C2810;
+
+  --espresso:  #1A0F08;
+  --latte:     #E8D5B0;
+  --matcha:    #7DA87B;
+  --sky:       #8FB8D4;
+  --rose:      #D4948A;
+  --lavender:  #A898C8;
+
+  /* 시맨틱 컬러 */
+  --bg-primary:    var(--cream-50);
+  --bg-surface:    var(--cream-100);
+  --bg-elevated:   #FFFFFF;
+  --bg-overlay:    rgba(26, 15, 8, 0.72);
+
+  --text-primary:  var(--brown-700);
+  --text-secondary: var(--brown-500);
+  --text-muted:    var(--brown-400);
+  --text-inverse:  var(--cream-100);
+
+  --border-light:  rgba(160, 120, 64, 0.18);
+  --border-mid:    rgba(160, 120, 64, 0.35);
+  --border-strong: rgba(160, 120, 64, 0.6);
+
+  --accent-primary: var(--brown-600);
+  --accent-hover:   var(--brown-700);
+  --accent-soft:    var(--cream-200);
+
+  --online-green: #6DB87A;
+  --coin-gold:    #E8B84B;
+  --danger:       #D4605A;
+  --info:         #5A8CD4;
+
+  /* 타이포그래피 */
+  --font-serif: 'Gowun Batang', Georgia, serif;
+  --font-sans:  'DM Sans', -apple-system, sans-serif;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-md:   17px;
+  --text-lg:   20px;
+  --text-xl:   24px;
+  --text-2xl:  30px;
+  --text-3xl:  38px;
+
+  /* 간격 */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* 레이아웃 */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+  --radius-xl:  24px;
+  --radius-full: 9999px;
+
+  --shadow-sm:  0 1px 3px rgba(26,15,8,0.08), 0 1px 2px rgba(26,15,8,0.04);
+  --shadow-md:  0 4px 12px rgba(26,15,8,0.10), 0 2px 4px rgba(26,15,8,0.06);
+  --shadow-lg:  0 16px 40px rgba(26,15,8,0.14), 0 4px 12px rgba(26,15,8,0.08);
+  --shadow-xl:  0 32px 64px rgba(26,15,8,0.18);
+
+  /* 전환 */
+  --transition-fast:   150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-base:   250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow:   400ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Z-인덱스 레이어 */
+  --z-world:    0;
+  --z-hud:      10;
+  --z-panel:    20;
+  --z-modal:    30;
+  --z-toast:    40;
+  --z-tooltip:  50;
+}
+
+/* ── 리셋 & 베이스 ──────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  user-select: none;
+}
+
+/* ── 캔버스 레이어 ───────────────────────────────────────── */
+#world-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: var(--z-world);
+  cursor: grab;
+}
+#world-canvas:active {
+  cursor: grabbing;
+}
+
+/* ── 앱 & UI 오버레이 ─────────────────────────────────────── */
+#app {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+}
+#app > * {
+  pointer-events: auto;
+}
+
+#ui-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-panel);
+  pointer-events: none;
+}
+#ui-overlay > * {
+  pointer-events: auto;
+}
+
+/* ── 공통 컴포넌트 ────────────────────────────────────────── */
+
+/* 버튼 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--brown-600);
+  color: var(--cream-100);
+  box-shadow: 0 1px 3px rgba(90,62,24,0.3);
+}
+.btn-primary:hover {
+  background: var(--brown-700);
+  box-shadow: 0 2px 8px rgba(90,62,24,0.4);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1.5px solid var(--border-mid);
+}
+.btn-ghost:hover {
+  background: var(--cream-200);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.btn-soft {
+  background: var(--cream-200);
+  color: var(--brown-600);
+}
+.btn-soft:hover {
+  background: var(--cream-300);
+}
+
+.btn-sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+}
+
+.btn-lg {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-md);
+  border-radius: var(--radius-lg);
+}
+
+.btn-icon {
+  padding: var(--space-2);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.btn-round {
+  border-radius: var(--radius-full);
+}
+
+/* 카드 */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.card-glass {
+  background: rgba(253, 250, 244, 0.88);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid rgba(220, 201, 160, 0.5);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 입력 필드 */
+.input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.input::placeholder {
+  color: var(--text-muted);
+}
+.input:focus {
+  border-color: var(--brown-400);
+  box-shadow: 0 0 0 3px rgba(160,120,64,0.12);
+  background: var(--bg-elevated);
+}
+
+/* 뱃지 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.badge-green {
+  background: rgba(109,184,122,0.15);
+  color: #3A7A46;
+}
+.badge-gold {
+  background: rgba(232,184,75,0.18);
+  color: #8A6010;
+}
+.badge-info {
+  background: rgba(90,140,212,0.15);
+  color: #2A5A9A;
+}
+
+/* 구분선 */
+.divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: var(--space-4) 0;
+}
+
+/* 텍스트 유틸리티 */
+.text-serif   { font-family: var(--font-serif); }
+.text-primary { color: var(--text-primary); }
+.text-muted   { color: var(--text-muted); }
+.text-sm      { font-size: var(--text-sm); }
+.text-xs      { font-size: var(--text-xs); }
+.font-medium  { font-weight: 500; }
+
+/* 스크롤바 */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* 애니메이션 키프레임 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+@keyframes coin-spin {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-10px) scale(0.96); }
+}
+
+.animate-fadeIn     { animation: fadeIn     var(--transition-base) both; }
+.animate-fadeInUp   { animation: fadeInUp   var(--transition-slow) both; }
+.animate-fadeInDown { animation: fadeInDown var(--transition-slow) both; }
+.animate-scaleIn    { animation: scaleIn    var(--transition-spring) both; }
+.animate-float      { animation: float 3s ease-in-out infinite; }
+
+/* 반응형 최소값 */
+@media (max-width: 640px) {
+  :root {
+    --text-base: 14px;
+  }
+}

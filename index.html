@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>☕ Somewhere — 가상 카페 & 공간</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <!-- Google Identity Services — authService.js의 GOOGLE_CLIENT_ID를 설정하세요 -->
+  <script src="https://accounts.google.com/gsi/client" async></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #1a0f07;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    /* Three.js 캔버스 */
+    #world-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* UI 오버레이 (모달, HUD, 패널 등) */
+    #ui-root {
+      position: fixed;
+      inset: 0;
+      pointer-events: none; /* 자식 요소가 개별적으로 pointer-events 설정 */
+      z-index: 10;
+    }
+    #ui-root > * {
+      pointer-events: auto;
+    }
+
+    /* 로딩 스크린 */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #1a0f07;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      color: #f5e6d3;
+    }
+    #loading-screen .logo {
+      font-family: 'Gowun Batang', serif;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      color: #e8a87c;
+      letter-spacing: 0.05em;
+    }
+    #loading-screen .subtitle {
+      font-size: 1rem;
+      color: #a07850;
+      letter-spacing: 0.1em;
+    }
+    #loading-screen .dots {
+      display: flex; gap: .6rem;
+    }
+    #loading-screen .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #c47d4a;
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+    #loading-screen .dot:nth-child(2) { animation-delay: .2s; }
+    #loading-screen .dot:nth-child(3) { animation-delay: .4s; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: .3; transform: scale(.8); }
+      50%       { opacity: 1;  transform: scale(1.2); }
+    }
+
+    /* 씬 전환 오버레이 */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(26, 15, 7, 0);
+      pointer-events: none;
+      z-index: 5;
+      transition: background 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Three.js 렌더 대상 -->
+  <canvas id="world-canvas"></canvas>
+
+  <!-- 씬 전환 오버레이 -->
+  <div id="overlay"></div>
+
+  <!-- UI 레이어 (모달 · HUD · 패널 등 동적 마운트) -->
+  <div id="ui-root"></div>
+
+  <!-- 로딩 스크린 (부트 완료 후 제거) -->
+  <div id="loading-screen">
+    <div class="logo">☕ Somewhere</div>
+    <div class="subtitle">당신만의 공간을 준비하고 있어요</div>
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
