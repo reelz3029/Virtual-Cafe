@@ -481,6 +481,7 @@ export class CafeScene {
     }
 
     group.position.set(pos.x, 0, pos.z);
+    group.userData.userId = id; // 레이캐스트 hover 감지용
     this.scene.add(group);
 
     const avatarKey = `${avatar.bodyColor}_${(avatar.accessories||[]).sort().join(',')}`;
@@ -531,6 +532,11 @@ export class CafeScene {
       { x: 8.0, z: 6.5 }, { x: 6.5, z: 5.0 }, { x: 8.0, z: 7.5 },
     ];
     return slots[hash % slots.length];
+  }
+
+  // ── 캐릭터 그룹 목록 (hover 레이캐스트용) ────────────────
+  getCharacterGroups() {
+    return [...this.characterSprites.values()].map(c => c.group);
   }
 
   // ── 레이캐스트 대상 목록 ──────────────────────────────────

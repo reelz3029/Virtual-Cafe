@@ -37,9 +37,75 @@ export class WorldRenderer {
     // 캐릭터 diff용 이전 상태 스냅샷
     this._prevUsers = new Map(); // userId → snapshot string
 
+    // 테이블 hover 툴팁
+    this._hoveredTableId  = null;
+    this._tableTooltipEl  = this._createTableTooltip();
+
     this._initRenderer();
     this._initCamera();
     this._bindEvents();
+  }
+
+  // ── 테이블 hover 툴팁 생성 ──────────────────────────────
+  _createTableTooltip() {
+    const el = document.createElement('div');
+    el.id = 'table-tooltip';
+    el.style.cssText = `
+      position: fixed; display: none; z-index: 50;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+    `;
+    el.innerHTML = `
+      <style>
+      #table-tooltip {
+        background: rgba(255,255,255,0.97);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(196,160,106,0.3);
+        border-radius: 14px;
+        box-shadow: 0 6px 24px rgba(26,15,8,0.15);
+        padding: 12px 14px;
+        min-width: 150px;
+        text-align: center;
+      }
+      .table-tooltip-info {
+        font-size: 12px; color: #7A6040; margin-bottom: 6px;
+      }
+      .table-tooltip-users {
+        font-size: 12.5px; font-weight: 600; color: #3C2810;
+        margin-bottom: 8px;
+        display: flex; flex-direction: column; gap: 2px;
+      }
+      .btn-table-join {
+        width: 100%; padding: 7px 0;
+        background: #7A5A28; color: #F7F0E0;
+        border: none; border-radius: 9px;
+        font-size: 12px; font-weight: 600;
+        cursor: pointer; font-family: inherit;
+        transition: background 0.15s;
+      }
+      .btn-table-join:hover { background: #5A3E18; }
+      .btn-table-join.sent  { background: #F0E8D4; color: #A07840; cursor: default; }
+      .table-tooltip-mine   { font-size: 11px; color: #6DB87A; font-weight: 600; }
+      </style>
+      <div class="table-tooltip-info"></div>
+      <div class="table-tooltip-users"></div>
+      <button class="btn-table-join" style="display:none"></button>
+      <div class="table-tooltip-mine" style="display:none">✓ 내 자리</div>
+    `;
+    document.body.appendChild(el);
+
+    el.querySelector('.btn-table-join').addEventListener('click', () => {
+      const tableId = this._hoveredTableId;
+      if (!tableId) return;
+      const btn = el.querySelector('.btn-table-join');
+      if (btn.classList.contains('sent')) return;
+      multiplayerSim.requestJoin(tableId);
+      btn.textContent = '요청 중...';
+      btn.classList.add('sent');
+      setTimeout(() => this._hideTableTooltip(), 2500);
+    });
+
+    return el;
   }
 
   // ── Three.js 초기화 ──────────────────────────────────────
@@ -69,13 +135,14 @@ export class WorldRenderer {
   // ── 이벤트 바인딩 ────────────────────────────────────────
   _bindEvents() {
     this.canvas.addEventListener('mousedown',  e => this._onMouseDown(e));
-    window.addEventListener('mousemove',       e => this._onMouseMove(e));
+    window.addEventListener('mousemove',       e => this._onWindowMouseMove(e));
     window.addEventListener('mouseup',         e => this._onMouseUp(e));
     this.canvas.addEventListener('touchstart', e => this._onTouchStart(e), { passive: true });
     window.addEventListener('touchmove',       e => this._onTouchMove(e),  { passive: true });
     window.addEventListener('touchend',        e => this._onMouseUp(e));
     this.canvas.addEventListener('wheel',      e => this._onWheel(e), { passive: true });
     window.addEventListener('resize',          () => this._onResize());
+    document.addEventListener('mouseleave',    () => this._hideTableTooltip());
   }
 
   _onMouseDown(e) {
@@ -86,8 +153,16 @@ export class WorldRenderer {
     this._cam.velocity   = { x: 0, z: 0 };
   }
 
+  // window 전체 mousemove — drag + hover 통합
+  _onWindowMouseMove(e) {
+    if (this._cam.isDragging) {
+      this._onMouseMove(e);
+    } else {
+      this._checkTableHover(e.clientX, e.clientY);
+    }
+  }
+
   _onMouseMove(e) {
-    if (!this._cam.isDragging) return;
     const dx = e.clientX - this._cam.lastMouse.x;
     const dy = e.clientY - this._cam.lastMouse.y;
     const speed = this._cam.zoom * 0.008;
@@ -148,6 +223,91 @@ export class WorldRenderer {
     }
   }
 
+  // ── 테이블 hover 감지 (2D 근접 판정) ────────────────────
+  // 레이캐스팅 대신: 각 테이블의 3D 위치를 스크린 2D로 투영한 뒤
+  // 마우스 거리가 HOVER_R px 이내인 가장 가까운 테이블을 선택
+  _checkTableHover(clientX, clientY) {
+    const { auth } = store.getState();
+    if (!auth.isLoggedIn || !this._activeScene) { this._hideTableTooltip(); return; }
+
+    const HOVER_R = 72; // 픽셀 반경
+    const v = new THREE.Vector3();
+    let closestId   = null;
+    let closestDist = Infinity;
+
+    this._activeScene.tables.forEach((tableData, tableId) => {
+      v.set(tableData.position.x, 0.72, tableData.position.z).project(this.camera);
+      const sx = (v.x *  0.5 + 0.5) * window.innerWidth;
+      const sy = (v.y * -0.5 + 0.5) * window.innerHeight;
+      const d  = Math.hypot(clientX - sx, clientY - sy);
+      if (d < HOVER_R && d < closestDist) {
+        closestDist = d;
+        closestId   = tableId;
+      }
+    });
+
+    if (closestId) this._showTableTooltip(closestId);
+    else           this._hideTableTooltip();
+  }
+
+  _showTableTooltip(tableId) {
+    const { auth, myTableId, onlineUsers } = store.getState();
+
+    const tableData = this._activeScene?.tables?.get(tableId);
+    if (!tableData) { this._hideTableTooltip(); return; }
+
+    this._hoveredTableId = tableId;
+
+    // 3D 위치 → 2D 화면 좌표 투영 (테이블 상판 높이)
+    const pos3 = new THREE.Vector3(tableData.position.x, 1.4, tableData.position.z);
+    pos3.project(this.camera);
+    const screenX = (pos3.x * 0.5 + 0.5) * window.innerWidth;
+    const screenY = (-pos3.y * 0.5 + 0.5) * window.innerHeight;
+
+    const usersAtTable = onlineUsers.filter(u => u.tableId === tableId);
+    const isMyTable    = myTableId === tableId;
+    const others       = usersAtTable.filter(u => u.id !== auth.user?.id);
+
+    const infoEl  = this._tableTooltipEl.querySelector('.table-tooltip-info');
+    const usersEl = this._tableTooltipEl.querySelector('.table-tooltip-users');
+    const btnEl   = this._tableTooltipEl.querySelector('.btn-table-join');
+    const mineEl  = this._tableTooltipEl.querySelector('.table-tooltip-mine');
+
+    infoEl.textContent = `🪑 ${usersAtTable.length} / 4`;
+
+    if (usersAtTable.length === 0) {
+      usersEl.innerHTML = '<span style="color:#A09070;font-size:12px">빈 테이블</span>';
+    } else {
+      usersEl.innerHTML = usersAtTable.slice(0, 4)
+        .map(u => `<span>${u.id === auth.user?.id ? '😺' : '🐱'} ${u.username}</span>`)
+        .join('');
+    }
+
+    if (isMyTable) {
+      mineEl.style.display = '';
+      btnEl.style.display  = 'none';
+    } else if (others.length > 0 && !btnEl.classList.contains('sent')) {
+      mineEl.style.display = 'none';
+      btnEl.style.display  = '';
+      btnEl.textContent    = '합석 요청 🤝';
+    } else {
+      mineEl.style.display = 'none';
+      btnEl.style.display  = 'none';
+    }
+
+    this._tableTooltipEl.style.left    = `${screenX}px`;
+    this._tableTooltipEl.style.top     = `${screenY - 8}px`;
+    this._tableTooltipEl.style.display = 'block';
+  }
+
+  _hideTableTooltip() {
+    this._tableTooltipEl.style.display = 'none';
+    this._hoveredTableId = null;
+    const btn = this._tableTooltipEl.querySelector('.btn-table-join');
+    btn.classList.remove('sent');
+    btn.textContent = '합석 요청 🤝';
+  }
+
   _onTableClick(tableId) {
     const { auth, myTableId } = store.getState();
     if (!auth.isLoggedIn) {
@@ -203,6 +363,7 @@ export class WorldRenderer {
         break;
     }
 
+    this._hideTableTooltip();
     // 멀티플레이어 시작 — 씬 이름 전달로 Firebase 경로 분리
     multiplayerSim.stop();
     multiplayerSim.start(8, sceneName);

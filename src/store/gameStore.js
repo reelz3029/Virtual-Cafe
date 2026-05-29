@@ -52,10 +52,10 @@ const INITIAL_STATE = {
 
   // ── 합석 시스템 ──
   joinRequests: [],     // [{ fromId, fromName, fromAvatar, tableId }]
-  tablemates: [],       // 같이 앉은 사람들의 id 배열
 
   // ── 채팅 ──
-  chatMessages: [],     // [{ id, from, fromName, text, timestamp, tableId }]
+  chatMessages: [],      // [{ id, from, fromName, text, timestamp }] — 전체
+  tableChatMessages: [], // [{ id, from, fromName, text, timestamp }] — 합석 전용
   isChatOpen: false,
 
   // ── 커피 메뉴 ──
@@ -116,8 +116,8 @@ export function logoutUser() {
     sessionStart: null,
     myTableId: null,
     mySeatIndex: null,
-    tablemates: [],
     chatMessages: [],
+    tableChatMessages: [],
     isChatOpen: false,
   }));
 }
@@ -214,18 +214,16 @@ export function addJoinRequest(request) {
 export function resolveJoinRequest(fromId, accepted) {
   store.setState(s => {
     const remaining = s.joinRequests.filter(r => r.fromId !== fromId);
-    const tablemates = accepted
-      ? [...s.tablemates, fromId]
-      : s.tablemates;
     return {
       joinRequests: remaining,
-      tablemates,
-      ui: {
-        ...s.ui,
-        showJoinRequest: remaining.length > 0,
-      },
+      ui: { ...s.ui, showJoinRequest: remaining.length > 0 },
     };
   });
+}
+
+/** 합석 채팅 메시지 전체 교체 */
+export function setTableChatMessages(messages) {
+  store.setState({ tableChatMessages: messages });
 }
 
 /** 커피 주문 */
