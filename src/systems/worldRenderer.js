@@ -398,11 +398,19 @@ export class WorldRenderer {
 
     if (!sceneName) return;
 
-    switch (sceneName) {
-      case 'cafe':
-      default:
-        this._activeScene = new CafeScene();
-        break;
+    try {
+      switch (sceneName) {
+        case 'cafe':
+        default:
+          this._activeScene = new CafeScene();
+          break;
+      }
+    } catch (err) {
+      console.error('[WorldRenderer] 씬 생성 오류:', err);
+      // 씬 생성 실패 시 멀티플레이어만 최소 시작 (빈 화면 대신 오류 방지)
+      multiplayerSim.stop();
+      multiplayerSim.start(8, sceneName);
+      return;
     }
 
     this._hideTableTooltip();

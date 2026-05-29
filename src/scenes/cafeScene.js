@@ -416,6 +416,9 @@ export class CafeScene {
     const seed = Math.abs(tx * 17 + tz * 31 + Math.abs(tx * tz) * 7) % 1000;
     const tableIds = [];
 
+    // layoutIdx는 if/else 모두에서 접근 가능하게 먼저 선언
+    const layoutIdx = isCenter ? 0 : seed % TILE_LAYOUTS.length;
+
     if (isCenter) {
       // 중앙 타일: 카운터 주변 테이블 4개
       const periphery = [
@@ -428,7 +431,6 @@ export class CafeScene {
         tableIds.push(id);
       });
     } else {
-      const layoutIdx = seed % TILE_LAYOUTS.length;
       TILE_LAYOUTS[layoutIdx].forEach((pos, i) => {
         const id = `table_${startIdx + i}`;
         this._createTable(id, wx + pos.x, wz + pos.z, SEATS_PER_TABLE);
