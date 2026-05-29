@@ -8,110 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
   <script src="https://accounts.google.com/gsi/client" async></script>
-
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      width: 100%; height: 100%; overflow: hidden;
-      background: #1A0C06;
-      font-family: 'DM Sans', sans-serif;
-    }
-
-    #world-canvas {
-      position: fixed;
-      inset: 0;
-      width: 100% !important;
-      height: 100% !important;
-      display: block;
-    }
-
-    #ui-root {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 10;
-    }
-    #ui-root > * { pointer-events: auto; }
-
-    /* ── 로딩 스크린 ── */
-    #loading-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      background: radial-gradient(ellipse at 50% 60%, #2E1606 0%, #1A0C06 70%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-    }
-
-    /* 고양이 SVG 컨테이너 */
-    .loading-cat-wrap {
-      margin-bottom: 28px;
-      animation: cat-float 3s ease-in-out infinite;
-    }
-    @keyframes cat-float {
-      0%, 100% { transform: translateY(0px); }
-      50%       { transform: translateY(-10px); }
-    }
-
-    /* 꼬리 흔들기 */
-    .cat-tail {
-      transform-origin: 62px 82px;
-      animation: tail-sway 1.8s ease-in-out infinite;
-    }
-    @keyframes tail-sway {
-      0%, 100% { transform: rotate(-10deg); }
-      50%       { transform: rotate(10deg); }
-    }
-
-    /* 로고 */
-    .loading-logo {
-      font-family: 'Gowun Batang', serif;
-      font-size: clamp(1.8rem, 4vw, 2.6rem);
-      font-weight: 700;
-      color: #F5C890;
-      letter-spacing: 0.04em;
-      margin-bottom: 6px;
-    }
-    .loading-subtitle {
-      font-size: 0.9rem;
-      color: #C08040;
-      letter-spacing: 0.12em;
-      margin-bottom: 28px;
-    }
-
-    /* 발바닥 로딩 점 */
-    .loading-paws {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    .loading-paw {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #C47840;
-      animation: paw-pulse 1.2s ease-in-out infinite;
-    }
-    .loading-paw:nth-child(2) { animation-delay: .22s; }
-    .loading-paw:nth-child(3) { animation-delay: .44s; }
-    @keyframes paw-pulse {
-      0%, 100% { opacity: .25; transform: scale(.7); }
-      50%       { opacity: 1;   transform: scale(1.2); background: #E8A060; }
-    }
-
-    /* 씬 전환 오버레이 */
-    #overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(26, 15, 6, 0);
-      pointer-events: none;
-      z-index: 5;
-      transition: background 0.4s ease;
-    }
-  </style>
+  <link rel="stylesheet" href="/src/styles/loading.css" />
 </head>
 <body>
   <canvas id="world-canvas"></canvas>
@@ -119,51 +16,52 @@
   <div id="ui-root"></div>
 
   <div id="loading-screen">
-    <!-- 고양이 일러스트 -->
+    <!-- 고양이 일러스트 — 치비 라인아트 스타일 -->
     <div class="loading-cat-wrap">
-      <svg width="110" height="120" viewBox="0 0 110 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="120" height="132" viewBox="0 0 120 132" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- 그림자 -->
+        <ellipse cx="55" cy="125" rx="23" ry="5" fill="rgba(120,80,30,0.13)"/>
         <!-- 꼬리 (흔들림 애니메이션) -->
         <g class="cat-tail">
-          <path d="M72 95 Q96 84 90 64" stroke="#E8A860" stroke-width="9" stroke-linecap="round" fill="none"/>
-          <path d="M72 95 Q96 84 90 64" stroke="#5A3418" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+          <path d="M70 102 Q96 86 86 64" stroke="#D4C4A8" stroke-width="11" stroke-linecap="round" fill="none"/>
+          <path d="M70 102 Q96 86 86 64" stroke="#F5EDD8" stroke-width="6.5" stroke-linecap="round" fill="none"/>
         </g>
         <!-- 왼쪽 귀 -->
-        <path d="M23 44 L10 16 L34 36" fill="#F0C080" stroke="#5A3418" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M24 41 L15 22 L31 34" fill="#F0A898" stroke="none"/>
+        <ellipse cx="27" cy="26" rx="14" ry="18" fill="#D4C4A8" transform="rotate(-14 27 26)"/>
+        <ellipse cx="27" cy="26" rx="11" ry="14.5" fill="#F5EDD8" transform="rotate(-14 27 26)"/>
+        <ellipse cx="27" cy="28" rx="6" ry="8.5" fill="#FFD4CC" transform="rotate(-14 27 26)"/>
         <!-- 오른쪽 귀 -->
-        <path d="M77 44 L90 16 L66 36" fill="#F0C080" stroke="#5A3418" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M76 41 L85 22 L69 34" fill="#F0A898" stroke="none"/>
+        <ellipse cx="83" cy="26" rx="14" ry="18" fill="#D4C4A8" transform="rotate(14 83 26)"/>
+        <ellipse cx="83" cy="26" rx="11" ry="14.5" fill="#F5EDD8" transform="rotate(14 83 26)"/>
+        <ellipse cx="83" cy="28" rx="6" ry="8.5" fill="#FFD4CC" transform="rotate(14 83 26)"/>
         <!-- 머리 -->
-        <ellipse cx="50" cy="58" rx="30" ry="27" fill="#F5C880" stroke="#5A3418" stroke-width="2.2"/>
-        <!-- 무늬 줄무늬 (탭비) -->
-        <path d="M40 38 Q50 35 60 38" stroke="#D4984A" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.6"/>
-        <path d="M37 43 Q50 40 63 43" stroke="#D4984A" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.4"/>
-        <!-- 눈 (살짝 웃는 눈) -->
-        <path d="M34 54 Q38 50 42 54" stroke="#3A2010" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-        <path d="M58 54 Q62 50 66 54" stroke="#3A2010" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-        <!-- 코 -->
-        <path d="M46 63 L50 67 L54 63 Z" fill="#E87888" stroke="none"/>
-        <!-- 입 -->
-        <path d="M46 67 Q50 71 54 67" stroke="#5A3418" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <!-- 볼터치 -->
-        <ellipse cx="34" cy="67" rx="8" ry="5" fill="rgba(228,130,110,0.32)"/>
-        <ellipse cx="66" cy="67" rx="8" ry="5" fill="rgba(228,130,110,0.32)"/>
-        <!-- 수염 -->
-        <line x1="6" y1="61" x2="28" y2="63" stroke="#5A3418" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="6" y1="67" x2="28" y2="67" stroke="#5A3418" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="94" y1="61" x2="72" y2="63" stroke="#5A3418" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="94" y1="67" x2="72" y2="67" stroke="#5A3418" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="55" cy="57" r="33" fill="#D4C4A8"/>
+        <circle cx="55" cy="56" r="31" fill="#F5EDD8"/>
         <!-- 몸통 -->
-        <ellipse cx="50" cy="100" rx="26" ry="22" fill="#F5C880" stroke="#5A3418" stroke-width="2.2"/>
+        <ellipse cx="55" cy="101" rx="27" ry="25" fill="#D4C4A8"/>
+        <ellipse cx="55" cy="100" rx="25" ry="23" fill="#F5EDD8"/>
         <!-- 앞발 -->
-        <ellipse cx="32" cy="113" rx="11" ry="7" fill="#F0B870" stroke="#5A3418" stroke-width="2"/>
-        <ellipse cx="62" cy="113" rx="11" ry="7" fill="#F0B870" stroke="#5A3418" stroke-width="2"/>
-        <!-- 발가락 -->
-        <path d="M26 113 Q32 117 38 113" stroke="#5A3418" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-        <path d="M56 113 Q62 117 68 113" stroke="#5A3418" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-        <!-- 몸통 무늬 -->
-        <path d="M36 88 Q50 84 64 88" stroke="#D4984A" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.5"/>
-        <path d="M34 95 Q50 91 66 95" stroke="#D4984A" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.35"/>
+        <ellipse cx="35" cy="116" rx="13" ry="8.5" fill="#D4C4A8"/>
+        <ellipse cx="35" cy="115" rx="11" ry="7" fill="#F5EDD8"/>
+        <ellipse cx="75" cy="116" rx="13" ry="8.5" fill="#D4C4A8"/>
+        <ellipse cx="75" cy="115" rx="11" ry="7" fill="#F5EDD8"/>
+        <!-- 눈 (큰 동그란 치비 눈) -->
+        <circle cx="43" cy="55" r="9" fill="#1A1010"/>
+        <circle cx="45" cy="51" r="3" fill="white"/>
+        <circle cx="67" cy="55" r="9" fill="#1A1010"/>
+        <circle cx="69" cy="51" r="3" fill="white"/>
+        <!-- 코 -->
+        <path d="M51 67 L55 72 L59 67 Z" fill="#E08090"/>
+        <!-- 입 -->
+        <path d="M50 72 Q55 78 60 72" stroke="rgba(90,50,20,0.65)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <!-- 볼터치 -->
+        <ellipse cx="32" cy="66" rx="10" ry="5.5" fill="rgba(240,140,125,0.26)"/>
+        <ellipse cx="78" cy="66" rx="10" ry="5.5" fill="rgba(240,140,125,0.26)"/>
+        <!-- 수염 -->
+        <line x1="3"  y1="64" x2="36" y2="67" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="3"  y1="71" x2="36" y2="71" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="107" y1="64" x2="74" y2="67" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="107" y1="71" x2="74" y2="71" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
     </div>
 

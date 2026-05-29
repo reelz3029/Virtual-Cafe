@@ -116,104 +116,104 @@ function getCharacterTexture(avatar) {
 }
 
 /**
- * Canvas 2D로 고양이 캐릭터 그리기
- * 귀엽고 단순한 2D 벡터 스타일
+ * Canvas 2D로 고양이 캐릭터 그리기 — 치비 라인아트 스타일
+ * 큰 둥근 눈, 뭉툭한 체형, 깔끔한 아웃라인
  */
-function drawCharacter({ bodyColor = '#F4C896', accessories = [] } = {}) {
+function drawCharacter({ bodyColor = '#F4ECD8', accessories = [] } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = CANVAS_SIZE;
   canvas.height = CANVAS_SIZE;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-  const cx = 64;  // 중심 X
-  const scale = 1; // 전체 스케일
-
-  // ── 색상 계산 ──
-  const dark = darken(bodyColor, 0.2);
-  const light = lighten(bodyColor, 0.15);
-  const pinkInner = '#F8C0C0';
+  const cx = 64;
+  const dark = darken(bodyColor, 0.18);
+  const pinkInner = '#FFD8D0';
 
   // ── 그림자 ──
   ctx.save();
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = '#3A2010';
+  ctx.globalAlpha = 0.10;
+  ctx.fillStyle = '#2A1408';
   ctx.beginPath();
-  ctx.ellipse(cx, 110, 22, 7, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, 118, 20, 5, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   // ── 꼬리 ──
   ctx.save();
   ctx.strokeStyle = dark;
-  ctx.lineWidth = 7;
+  ctx.lineWidth = 9;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx + 16, 92);
-  ctx.quadraticCurveTo(cx + 40, 85, cx + 30, 68);
+  ctx.moveTo(cx + 18, 98);
+  ctx.quadraticCurveTo(cx + 42, 80, cx + 30, 60);
   ctx.stroke();
-  ctx.strokeStyle = bodyColor;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = lighten(bodyColor, 0.06);
+  ctx.lineWidth = 5;
   ctx.stroke();
   ctx.restore();
 
-  // ── 몸통 ──
-  ctx.fillStyle = bodyColor;
-  ctx.beginPath();
-  ctx.ellipse(cx, 82, 22, 26, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 몸통 밝은 부분
-  ctx.fillStyle = light;
-  ctx.beginPath();
-  ctx.ellipse(cx - 3, 76, 12, 16, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ── 앞발 ──
-  ctx.fillStyle = bodyColor;
-  // 왼발
-  ctx.beginPath();
-  ctx.ellipse(cx - 14, 100, 7, 6, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-  // 오른발
-  ctx.beginPath();
-  ctx.ellipse(cx + 14, 100, 7, 6, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 발 끝 (패드)
+  // ── 몸통 (아웃라인 + 채우기) ──
   ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.ellipse(cx - 14, 103, 5, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, 97, 26, 24, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(cx + 14, 103, 5, 3, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ── 귀 (모자 없을 때만) ──
-  const hasHat = accessories.includes('hat');
-  if (!hasHat) {
-    drawEars(ctx, cx, bodyColor, dark, pinkInner);
-  }
-
-  // ── 머리 ──
   ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.arc(cx, 56, 26, 0, Math.PI * 2);
+  ctx.ellipse(cx, 96, 24, 22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 머리 밝은 부분
-  ctx.fillStyle = light;
+  // ── 심플 셔츠/복장 오버레이 (앞치마 없을 때) ──
+  if (!accessories.includes('apron')) {
+    const shirtColor = lighten(darken(bodyColor, 0.08), 0.12);
+    ctx.fillStyle = shirtColor;
+    ctx.beginPath();
+    ctx.ellipse(cx, 100, 18, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── 앞발 ──
+  ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.ellipse(cx - 4, 50, 14, 12, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(cx - 19, 112, 11, 7.5, -0.12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(cx - 19, 111, 9.5, 6.2, -0.12, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── 얼굴 특징 ──
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.ellipse(cx + 19, 112, 11, 7.5, 0.12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(cx + 19, 111, 9.5, 6.2, 0.12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── 앞치마 (apron 악세서리) ──
+  if (accessories.includes('apron')) drawApron(ctx, cx);
+
+  // ── 귀 (모자 없을 때만) ──
+  if (!accessories.includes('hat')) drawEars(ctx, cx, bodyColor, dark, pinkInner);
+
+  // ── 머리 (아웃라인 + 채우기) ──
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.arc(cx, 56, 30, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.arc(cx, 55, 28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── 얼굴 ──
   drawFace(ctx, cx, accessories.includes('glasses'));
 
-  // ── 장신구들 ──
-  if (accessories.includes('hat'))       drawHat(ctx, cx);
-  if (accessories.includes('bow'))       drawBow(ctx, cx);
-  if (accessories.includes('scarf'))     drawScarf(ctx, cx);
+  // ── 장신구 ──
+  if (accessories.includes('hat'))        drawHat(ctx, cx);
+  if (accessories.includes('bow'))        drawBow(ctx, cx);
+  if (accessories.includes('scarf'))      drawScarf(ctx, cx);
   if (accessories.includes('headphones')) drawHeadphones(ctx, cx, bodyColor);
 
   return canvas;
@@ -222,114 +222,120 @@ function drawCharacter({ bodyColor = '#F4C896', accessories = [] } = {}) {
 // ── 세부 드로잉 함수들 ────────────────────────────────────
 
 function drawEars(ctx, cx, bodyColor, dark, pinkInner) {
-  // 왼쪽 귀
+  // 왼쪽 귀 — 둥근 치비 스타일
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.ellipse(cx - 22, 32, 12, 16, -0.22, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.moveTo(cx - 22, 42);
-  ctx.lineTo(cx - 32, 20);
-  ctx.lineTo(cx - 10, 34);
-  ctx.closePath();
+  ctx.ellipse(cx - 22, 32, 10, 13, -0.22, 0, Math.PI * 2);
   ctx.fill();
-
-  // 왼쪽 귀 안
   ctx.fillStyle = pinkInner;
   ctx.beginPath();
-  ctx.moveTo(cx - 21, 40);
-  ctx.lineTo(cx - 28, 25);
-  ctx.lineTo(cx - 13, 36);
-  ctx.closePath();
+  ctx.ellipse(cx - 22, 33, 6, 8, -0.22, 0, Math.PI * 2);
   ctx.fill();
 
   // 오른쪽 귀
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.ellipse(cx + 22, 32, 12, 16, 0.22, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.moveTo(cx + 22, 42);
-  ctx.lineTo(cx + 32, 20);
-  ctx.lineTo(cx + 10, 34);
-  ctx.closePath();
+  ctx.ellipse(cx + 22, 32, 10, 13, 0.22, 0, Math.PI * 2);
   ctx.fill();
-
-  // 오른쪽 귀 안
   ctx.fillStyle = pinkInner;
   ctx.beginPath();
-  ctx.moveTo(cx + 21, 40);
-  ctx.lineTo(cx + 28, 25);
-  ctx.lineTo(cx + 13, 36);
-  ctx.closePath();
+  ctx.ellipse(cx + 22, 33, 6, 8, 0.22, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawFace(ctx, cx, hasGlasses) {
-  // 안경이 있으면 렌즈+눈을 drawGlasses에서 통합 처리
   if (hasGlasses) {
     drawGlasses(ctx, cx);
   }
 
-  // 눈 (안경 없을 때)
+  // 큰 동그란 눈 — 치비 스타일 (안경 없을 때)
   if (!hasGlasses) {
-    // 왼쪽 눈
-    ctx.fillStyle = '#2A1A0A';
+    ctx.fillStyle = '#1A1010';
     ctx.beginPath();
-    ctx.ellipse(cx - 9, 54, 4.5, 5, 0, 0, Math.PI * 2);
+    ctx.arc(cx - 10, 55, 6.5, 0, Math.PI * 2);
     ctx.fill();
-    // 왼쪽 눈 하이라이트
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(cx - 7, 52, 1.5, 0, Math.PI * 2);
+    ctx.arc(cx - 8, 52, 2.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // 오른쪽 눈
-    ctx.fillStyle = '#2A1A0A';
+    ctx.fillStyle = '#1A1010';
     ctx.beginPath();
-    ctx.ellipse(cx + 9, 54, 4.5, 5, 0, 0, Math.PI * 2);
+    ctx.arc(cx + 10, 55, 6.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(cx + 11, 52, 1.5, 0, Math.PI * 2);
+    ctx.arc(cx + 12, 52, 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // 코
-  ctx.fillStyle = '#E8808A';
+  // 코 (작은 삼각형)
+  ctx.fillStyle = '#E08090';
   ctx.beginPath();
-  ctx.moveTo(cx, 61);
-  ctx.lineTo(cx - 3, 65);
-  ctx.lineTo(cx + 3, 65);
+  ctx.moveTo(cx, 65);
+  ctx.lineTo(cx - 3, 68);
+  ctx.lineTo(cx + 3, 68);
   ctx.closePath();
   ctx.fill();
 
-  // 수염 (왼쪽)
-  ctx.strokeStyle = 'rgba(80,50,20,0.5)';
+  // 수염
+  ctx.strokeStyle = 'rgba(100,70,40,0.42)';
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx - 5, 64);  ctx.lineTo(cx - 20, 62);  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx - 5, 67);  ctx.lineTo(cx - 20, 68);  ctx.stroke();
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - 6, 67); ctx.lineTo(cx - 24, 64); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 6, 70); ctx.lineTo(cx - 24, 72); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 6, 67); ctx.lineTo(cx + 24, 64); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 6, 70); ctx.lineTo(cx + 24, 72); ctx.stroke();
 
-  // 수염 (오른쪽)
-  ctx.beginPath();
-  ctx.moveTo(cx + 5, 64);  ctx.lineTo(cx + 20, 62);  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx + 5, 67);  ctx.lineTo(cx + 20, 68);  ctx.stroke();
-
-  // 입 (w 모양 귀여운 입)
-  ctx.strokeStyle = '#2A1A0A';
-  ctx.lineWidth = 1.5;
+  // 입
+  ctx.strokeStyle = 'rgba(80,45,18,0.65)';
+  ctx.lineWidth = 1.6;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx - 5, 69);
-  ctx.quadraticCurveTo(cx - 2, 73, cx, 71);
-  ctx.quadraticCurveTo(cx + 2, 73, cx + 5, 69);
+  ctx.moveTo(cx - 5, 71);
+  ctx.quadraticCurveTo(cx - 2, 75, cx, 73);
+  ctx.quadraticCurveTo(cx + 2, 75, cx + 5, 71);
   ctx.stroke();
 
   // 볼터치
-  ctx.fillStyle = 'rgba(240,140,130,0.35)';
+  ctx.fillStyle = 'rgba(240,140,125,0.28)';
   ctx.beginPath();
-  ctx.ellipse(cx - 14, 63, 5, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - 18, 65, 7, 4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(cx + 14, 63, 5, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + 18, 65, 7, 4, 0, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawApron(ctx, cx) {
+  // 흰 앞치마 비브
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 9, 80);
+  ctx.lineTo(cx + 9, 80);
+  ctx.lineTo(cx + 13, 108);
+  ctx.lineTo(cx - 13, 108);
+  ctx.closePath();
+  ctx.fill();
+  // 목 걸이 스트랩
+  ctx.strokeStyle = 'rgba(190,160,100,0.58)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, 80, 6, 0, Math.PI, true);
+  ctx.stroke();
+  // 주머니 디테일
+  ctx.strokeStyle = 'rgba(170,140,80,0.26)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cx - 6, 91, 12, 9);
 }
 
 function drawHat(ctx, cx) {
@@ -367,45 +373,38 @@ function drawGlasses(ctx, cx) {
   ctx.lineWidth = 2;
   ctx.fillStyle = 'rgba(180,210,240,0.3)';
 
-  // 왼쪽 렌즈
   ctx.beginPath();
-  ctx.arc(cx - 9, 54, 7, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(cx - 10, 55, 8, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx + 10, 55, 8, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 2, 55); ctx.lineTo(cx + 2, 55);
   ctx.stroke();
 
-  // 오른쪽 렌즈
+  // 눈
+  ctx.fillStyle = '#1A1010';
   ctx.beginPath();
-  ctx.arc(cx + 9, 54, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // 브릿지
-  ctx.beginPath();
-  ctx.moveTo(cx - 2, 54);
-  ctx.lineTo(cx + 2, 54);
-  ctx.stroke();
-
-  // 눈 (안경 위에)
-  ctx.fillStyle = '#2A1A0A';
-  ctx.beginPath();
-  ctx.ellipse(cx - 9, 54, 3.5, 4, 0, 0, Math.PI * 2);
+  ctx.arc(cx - 10, 55, 4.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(cx + 9, 54, 3.5, 4, 0, 0, Math.PI * 2);
+  ctx.arc(cx + 10, 55, 4.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
-  ctx.arc(cx - 7, 52, 1.2, 0, Math.PI * 2);
+  ctx.arc(cx - 8, 52, 1.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(cx + 11, 52, 1.2, 0, Math.PI * 2);
+  ctx.arc(cx + 12, 52, 1.5, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawBow(ctx, cx) {
-  // 리본 (오른쪽 귀 옆)
-  const bx = cx + 22;
-  const by = 38;
+  const bx = cx + 26;
+  const by = 34;
 
   ctx.fillStyle = '#E8608A';
   // 왼쪽 날개
@@ -426,54 +425,48 @@ function drawBow(ctx, cx) {
 }
 
 function drawScarf(ctx, cx) {
-  // 목도리
   ctx.fillStyle = '#E84848';
   ctx.beginPath();
-  ctx.rect(cx - 22, 72, 44, 10);
+  ctx.rect(cx - 22, 77, 44, 10);
   ctx.fill();
 
-  // 목도리 패턴
   ctx.fillStyle = '#FFFFFF';
   for (let i = 0; i < 5; i++) {
     ctx.beginPath();
-    ctx.rect(cx - 20 + i * 9, 74, 4, 2);
+    ctx.rect(cx - 20 + i * 9, 79, 4, 2);
     ctx.fill();
   }
 
-  // 늘어진 부분
   ctx.fillStyle = '#E84848';
   ctx.beginPath();
-  ctx.rect(cx - 5, 80, 14, 20);
+  ctx.rect(cx - 5, 85, 14, 18);
   ctx.fill();
 }
 
 function drawHeadphones(ctx, cx, bodyColor) {
-  // 헤드밴드
   ctx.strokeStyle = '#2A2A3A';
   ctx.lineWidth = 5;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(cx, 48, 28, Math.PI * 1.15, Math.PI * 1.85, false);
+  ctx.arc(cx, 52, 30, Math.PI * 1.12, Math.PI * 1.88, false);
   ctx.stroke();
 
-  // 오른쪽 이어패드
   ctx.fillStyle = '#3A3A4A';
   ctx.beginPath();
-  ctx.ellipse(cx + 26, 52, 8, 10, 0.3, 0, Math.PI * 2);
+  ctx.ellipse(cx + 28, 56, 8, 10, 0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#6A6A8A';
   ctx.beginPath();
-  ctx.ellipse(cx + 26, 52, 5, 7, 0.3, 0, Math.PI * 2);
+  ctx.ellipse(cx + 28, 56, 5, 7, 0.3, 0, Math.PI * 2);
   ctx.fill();
 
-  // 왼쪽 이어패드
   ctx.fillStyle = '#3A3A4A';
   ctx.beginPath();
-  ctx.ellipse(cx - 26, 52, 8, 10, -0.3, 0, Math.PI * 2);
+  ctx.ellipse(cx - 28, 56, 8, 10, -0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#6A6A8A';
   ctx.beginPath();
-  ctx.ellipse(cx - 26, 52, 5, 7, -0.3, 0, Math.PI * 2);
+  ctx.ellipse(cx - 28, 56, 5, 7, -0.3, 0, Math.PI * 2);
   ctx.fill();
 }
 

@@ -108,7 +108,7 @@ export class AuthModal {
   filter: drop-shadow(0 4px 12px rgba(140,80,20,.18));
 }
 .auth-cat-tail-anim {
-  transform-origin: 48px 72px;
+  transform-origin: 57px 78px;
   animation: auth-tail 2s ease-in-out infinite;
 }
 
@@ -328,42 +328,45 @@ export class AuthModal {
       <svg width="88" height="96" viewBox="0 0 88 96" fill="none" xmlns="http://www.w3.org/2000/svg">
         <!-- 꼬리 -->
         <g class="auth-cat-tail-anim">
-          <path d="M58 76 Q78 66 72 50" stroke="#E8A060" stroke-width="7.5" stroke-linecap="round" fill="none"/>
-          <path d="M58 76 Q78 66 72 50" stroke="#5A3418" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M57 78 Q76 64 68 48" stroke="#D4C4A8" stroke-width="9" stroke-linecap="round" fill="none"/>
+          <path d="M57 78 Q76 64 68 48" stroke="#F5EDD8" stroke-width="5.2" stroke-linecap="round" fill="none"/>
         </g>
         <!-- 왼쪽 귀 -->
-        <path d="M18 34 L6 10 L26 28" fill="#F0C080" stroke="#5A3418" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M19 32 L11 15 L24 26" fill="#EFA090" stroke="none"/>
+        <ellipse cx="22" cy="20" rx="11.5" ry="15" fill="#D4C4A8" transform="rotate(-14 22 20)"/>
+        <ellipse cx="22" cy="20" rx="9"    ry="12" fill="#F5EDD8"  transform="rotate(-14 22 20)"/>
+        <ellipse cx="22" cy="22" rx="5"    ry="7"  fill="#FFD4CC"  transform="rotate(-14 22 20)"/>
         <!-- 오른쪽 귀 -->
-        <path d="M62 34 L74 10 L54 28" fill="#F0C080" stroke="#5A3418" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M61 32 L69 15 L56 26" fill="#EFA090" stroke="none"/>
+        <ellipse cx="62" cy="20" rx="11.5" ry="15" fill="#D4C4A8" transform="rotate(14 62 20)"/>
+        <ellipse cx="62" cy="20" rx="9"    ry="12" fill="#F5EDD8"  transform="rotate(14 62 20)"/>
+        <ellipse cx="62" cy="22" rx="5"    ry="7"  fill="#FFD4CC"  transform="rotate(14 62 20)"/>
         <!-- 머리 -->
-        <ellipse cx="40" cy="46" rx="26" ry="24" fill="#F5C880" stroke="#5A3418" stroke-width="2"/>
-        <!-- 머리 무늬 -->
-        <path d="M30 30 Q40 27 50 30" stroke="#D49848" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.55"/>
-        <!-- 눈 -->
-        <path d="M27 44 Q31 40 35 44" stroke="#3A2010" stroke-width="2.4" stroke-linecap="round" fill="none"/>
-        <path d="M45 44 Q49 40 53 44" stroke="#3A2010" stroke-width="2.4" stroke-linecap="round" fill="none"/>
-        <!-- 코 -->
-        <path d="M37 52 L40 55.5 L43 52 Z" fill="#E87888"/>
-        <!-- 입 -->
-        <path d="M37 55.5 Q40 59 43 55.5" stroke="#5A3418" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        <!-- 볼터치 -->
-        <ellipse cx="27" cy="54" rx="7" ry="4.5" fill="rgba(228,130,110,.30)"/>
-        <ellipse cx="53" cy="54" rx="7" ry="4.5" fill="rgba(228,130,110,.30)"/>
-        <!-- 수염 -->
-        <line x1="4" y1="50" x2="22" y2="52" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="4" y1="55" x2="22" y2="55" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="76" y1="50" x2="58" y2="52" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="76" y1="55" x2="58" y2="55" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="42" cy="42" r="27" fill="#D4C4A8"/>
+        <circle cx="42" cy="41" r="25" fill="#F5EDD8"/>
         <!-- 몸통 -->
-        <ellipse cx="40" cy="80" rx="22" ry="19" fill="#F5C880" stroke="#5A3418" stroke-width="2"/>
+        <ellipse cx="42" cy="78" rx="22" ry="20" fill="#D4C4A8"/>
+        <ellipse cx="42" cy="77" rx="20" ry="18" fill="#F5EDD8"/>
         <!-- 앞발 -->
-        <ellipse cx="25" cy="91" rx="10" ry="6" fill="#F0B870" stroke="#5A3418" stroke-width="1.8"/>
-        <ellipse cx="52" cy="91" rx="10" ry="6" fill="#F0B870" stroke="#5A3418" stroke-width="1.8"/>
-        <!-- 발가락 선 -->
-        <path d="M20 91 Q25 95 30 91" stroke="#5A3418" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-        <path d="M47 91 Q52 95 57 91" stroke="#5A3418" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <ellipse cx="26" cy="89" rx="11" ry="7"   fill="#D4C4A8"/>
+        <ellipse cx="26" cy="88" rx="9.2" rx="9.2" ry="5.8" fill="#F5EDD8"/>
+        <ellipse cx="58" cy="89" rx="11" ry="7"   fill="#D4C4A8"/>
+        <ellipse cx="58" cy="88" rx="9.2" ry="5.8" fill="#F5EDD8"/>
+        <!-- 눈 (큰 동그란 치비 눈) -->
+        <circle cx="33" cy="41" r="7" fill="#1A1010"/>
+        <circle cx="35" cy="38" r="2.2" fill="white"/>
+        <circle cx="51" cy="41" r="7" fill="#1A1010"/>
+        <circle cx="53" cy="38" r="2.2" fill="white"/>
+        <!-- 코 -->
+        <path d="M38 51 L42 55 L46 51 Z" fill="#E08090"/>
+        <!-- 입 -->
+        <path d="M37 55 Q42 60 47 55" stroke="rgba(90,50,20,0.62)" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+        <!-- 볼터치 -->
+        <ellipse cx="24" cy="49" rx="8" ry="4.5" fill="rgba(240,140,125,0.26)"/>
+        <ellipse cx="60" cy="49" rx="8" ry="4.5" fill="rgba(240,140,125,0.26)"/>
+        <!-- 수염 -->
+        <line x1="3"  y1="49" x2="27" y2="51" stroke="rgba(100,70,40,0.40)" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="3"  y1="55" x2="27" y2="55" stroke="rgba(100,70,40,0.40)" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="81" y1="49" x2="57" y2="51" stroke="rgba(100,70,40,0.40)" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="81" y1="55" x2="57" y2="55" stroke="rgba(100,70,40,0.40)" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
     </div>
 

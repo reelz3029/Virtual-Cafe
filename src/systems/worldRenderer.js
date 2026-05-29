@@ -128,7 +128,7 @@ export class WorldRenderer {
     this.camera = new THREE.OrthographicCamera(
       -h * aspect, h * aspect, h, -h, 0.1, 100
     );
-    this.camera.position.set(0, 8, 8);
+    this.camera.position.set(9, 9, 9);
     this.camera.lookAt(0, 0, 0);
   }
 
@@ -331,7 +331,7 @@ export class WorldRenderer {
   // ── 카메라 업데이트 ──────────────────────────────────────
   _updateCameraPosition() {
     const { target } = this._cam;
-    this.camera.position.set(target.x, 8, target.z + 8);
+    this.camera.position.set(target.x + 9, 9, target.z + 9);
     this.camera.lookAt(target);
   }
 
