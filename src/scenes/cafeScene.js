@@ -20,8 +20,8 @@ const WRAP_LIMIT  = TILE_SIZE * (HALF_G + 0.5);  // 이 거리 넘으면 반대�
 const GRID_SPAN   = TILE_SIZE * GRID_DIM;         // 전체 그리드 크기 50
 
 const SEATS_PER_TABLE = 4;
-const TABLE_R         = 0.42;
-const SEAT_DIST       = 0.65;
+const TABLE_R         = 0.52;   // 테이블 반경 (0.42 → 0.52)
+const SEAT_DIST       = 0.82;   // 의자-테이블 거리 (0.65 → 0.82)
 
 // ── 따뜻한 앰버/허니 팔레트 ────────────────────────────────
 const C = {
@@ -60,16 +60,18 @@ function mat(color, opts = {}) {
   return _matCache.get(key);
 }
 
-// ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋, TILE_SIZE=10 기준 ±2.5) ──
+// ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋) ───────────
+// 모든 템플릿 2테이블 고정 → 랜덤성 최소화, 일정한 밀도 유지
+// TILE_SIZE=10 기준 ±3 이내, 인접 타일과 자연스럽게 이어지도록 설계
 const TILE_LAYOUTS = [
-  [{ x: -2.4, z: -2.4 }, { x: 2.2, z: 2.2 }],
-  [{ x: -2.0, z: 3.0 },  { x: 2.6, z: -2.0 }, { x: 0.4, z: 0.4 }],
-  [{ x: -3.2, z: -0.4 }, { x: 2.2, z: -2.8 }],
-  [{ x: 1.2,  z: 3.0 },  { x: -2.6, z: -1.2 }, { x: 3.0, z: 0.6 }],
-  [{ x: 2.6,  z: 2.6 },  { x: -2.2, z: 1.2 }],
-  [{ x: -3.0, z: -2.8 }, { x: 1.4, z: -1.6 }, { x: -1.0, z: 3.2 }],
-  [{ x: -1.2, z: -3.0 }, { x: 2.8, z: 1.4 }],
-  [{ x: 3.2,  z: -1.6 }, { x: -2.6, z: 2.6 }, { x: 0.6, z: 0.6 }],
+  [{ x: -2.5, z: -2.5 }, { x: 2.5, z:  2.5 }],  // 대각 /
+  [{ x:  2.5, z: -2.5 }, { x: -2.5, z:  2.5 }],  // 대각 \
+  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }],  // 수평
+  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }],  // 수직
+  [{ x: -2.5, z: -2.0 }, { x:  2.0, z:  2.5 }],  // 대각 / 변형
+  [{ x:  2.5, z: -2.0 }, { x: -2.0, z:  2.5 }],  // 대각 \ 변형
+  [{ x: -3.0, z:  1.5 }, { x:  2.5, z: -2.0 }],  // 오프셋
+  [{ x:  1.5, z:  3.0 }, { x: -2.5, z: -1.5 }],  // 오프셋
 ];
 
 // 타일별 램프 오프셋 (타일 중심 기준, ±2.5 이내)
@@ -595,37 +597,37 @@ export class CafeScene {
     group.name = tableId;
 
     const leg = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.06, 0.72, 8), mat(C.tableLeg)
+      new THREE.CylinderGeometry(0.05, 0.07, 0.74, 8), mat(C.tableLeg)
     );
-    leg.position.y = 0.36;
+    leg.position.y = 0.37;
     group.add(leg);
 
     const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12), mat(C.tableLeg)
+      new THREE.CylinderGeometry(0.26, 0.26, 0.04, 12), mat(C.tableLeg)
     );
     base.position.y = 0.02;
     group.add(base);
 
     const top = new THREE.Mesh(
-      new THREE.CylinderGeometry(TABLE_R, TABLE_R, 0.06, 24),
+      new THREE.CylinderGeometry(TABLE_R, TABLE_R, 0.07, 24),
       mat(C.tableTop)
     );
-    top.position.y = 0.74;
+    top.position.y = 0.76;
     top.userData.tableId = tableId;
     group.add(top);
 
     const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(TABLE_R, 0.022, 6, 24), mat(C.tableLeg)
+      new THREE.TorusGeometry(TABLE_R, 0.026, 6, 24), mat(C.tableLeg)
     );
-    rim.position.y = 0.74;
+    rim.position.y = 0.76;
     rim.rotation.x = Math.PI / 2;
     group.add(rim);
 
     if (((x * 1.7 + z * 1.3) % 2.2 + 2.2) % 2.2 > 1.0) {
       const cup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.048, 0.04, 0.09, 8), mat(0xE8D4B8)
+        new THREE.CylinderGeometry(0.056, 0.046, 0.10, 8), mat(0xE8D4B8)
       );
-      cup.position.set(0.10, 0.79, 0.08);
+      cup.position.set(0.14, 0.82, 0.10);
       group.add(cup);
     }
 
@@ -653,23 +655,23 @@ export class CafeScene {
     group.rotation.y = angle + Math.PI;
 
     const seat = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.16, 0.05, 12), mat(C.chairPad)
+      new THREE.CylinderGeometry(0.22, 0.20, 0.06, 12), mat(C.chairPad)
     );
-    seat.position.y = 0.44;
+    seat.position.y = 0.45;
     group.add(seat);
 
-    const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.4, 6), mat(C.chairWood));
-    bL.position.set(-0.1, 0.67, -0.14); group.add(bL);
-    const bR = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.4, 6), mat(C.chairWood));
-    bR.position.set(0.1, 0.67, -0.14); group.add(bR);
-    const bTop = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.04), mat(C.chairWood));
-    bTop.position.set(0, 0.88, -0.14); group.add(bTop);
+    const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6), mat(C.chairWood));
+    bL.position.set(-0.11, 0.69, -0.16); group.add(bL);
+    const bR = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6), mat(C.chairWood));
+    bR.position.set(0.11, 0.69, -0.16); group.add(bR);
+    const bTop = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.05), mat(C.chairWood));
+    bTop.position.set(0, 0.91, -0.16); group.add(bTop);
 
-    [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]].forEach(([lx, lz]) => {
+    [[-0.14, -0.14], [0.14, -0.14], [-0.14, 0.14], [0.14, 0.14]].forEach(([lx, lz]) => {
       const l = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.015, 0.015, 0.42, 6), mat(C.chairWood)
+        new THREE.CylinderGeometry(0.018, 0.018, 0.44, 6), mat(C.chairWood)
       );
-      l.position.set(lx, 0.21, lz);
+      l.position.set(lx, 0.22, lz);
       group.add(l);
     });
 
