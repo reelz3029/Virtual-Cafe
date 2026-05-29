@@ -61,17 +61,16 @@ function mat(color, opts = {}) {
 }
 
 // ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋) ───────────
-// 모든 템플릿 2테이블 고정 → 랜덤성 최소화, 일정한 밀도 유지
-// TILE_SIZE=10 기준 ±3 이내, 인접 타일과 자연스럽게 이어지도록 설계
+// 3테이블 고정, ±3 이내 — 삼각/L자 배치로 빈 공간 최소화
 const TILE_LAYOUTS = [
-  [{ x: -2.5, z: -2.5 }, { x: 2.5, z:  2.5 }],  // 대각 /
-  [{ x:  2.5, z: -2.5 }, { x: -2.5, z:  2.5 }],  // 대각 \
-  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }],  // 수평
-  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }],  // 수직
-  [{ x: -2.5, z: -2.0 }, { x:  2.0, z:  2.5 }],  // 대각 / 변형
-  [{ x:  2.5, z: -2.0 }, { x: -2.0, z:  2.5 }],  // 대각 \ 변형
-  [{ x: -3.0, z:  1.5 }, { x:  2.5, z: -2.0 }],  // 오프셋
-  [{ x:  1.5, z:  3.0 }, { x: -2.5, z: -1.5 }],  // 오프셋
+  [{ x: -2.5, z: -2.5 }, { x:  2.5, z:  2.5 }, { x: -2.5, z:  2.5 }],  // 삼각 /
+  [{ x:  2.5, z: -2.5 }, { x: -2.5, z:  2.5 }, { x:  2.5, z:  2.5 }],  // 삼각 \
+  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }, { x:  0.0, z: -3.0 }],  // L 수평+아래
+  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }, { x:  0.0, z:  3.0 }],  // L 수평+위
+  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }, { x: -3.0, z:  0.0 }],  // L 수직+왼
+  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }, { x:  3.0, z:  0.0 }],  // L 수직+오른
+  [{ x: -2.5, z: -2.5 }, { x:  2.5, z: -2.5 }, { x:  0.0, z:  2.8 }],  // 삼각 위
+  [{ x: -2.5, z:  2.5 }, { x:  2.5, z:  2.5 }, { x:  0.0, z: -2.8 }],  // 삼각 아래
 ];
 
 // 타일별 램프 오프셋 (타일 중심 기준, ±2.5 이내)
@@ -187,7 +186,6 @@ export class CafeScene {
       { w: CW + ovh,       d: cT + ovh,       px: 0,             pz: z2 - cT / 2 },
       { w: cT + ovh,       d: CD - cT * 2 + ovh, px: x1 + cT / 2, pz: 0           },
       { w: cT + ovh,       d: CD - cT * 2 + ovh, px: x2 - cT / 2, pz: 0           },
-      { w: CW - cT * 2 - 0.08, d: CD - cT * 2 - 0.08, px: 0, pz: 0 },  // 내부 작업대
     ].forEach(({ w, d, px, pz }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, d), mat(C.counterTop));
       m.position.set(px, cH + 0.045, pz);
@@ -379,12 +377,12 @@ export class CafeScene {
     const sprite = createCharacterSprite(
       { bodyColor: '#F0E8D8', accessories: ['apron'] }, '바리스타'
     );
-    sprite.scale.set(0.65, 0.85, 1);
-    sprite.position.y = 0.46;
+    sprite.scale.set(0.72, 0.92, 1);
+    sprite.position.y = 0.62;  // 카운터(cH=0.94) 위로 상반신 노출
     group.add(sprite);
 
-    const nameTag = createNameTag('바리스타', false);
-    nameTag.position.y = 1.10;
+    const nameTag = createNameTag('☕ 바리스타', false);
+    nameTag.position.y = 1.32;
     group.add(nameTag);
 
     group.position.set(x, 0, z);
@@ -423,10 +421,14 @@ export class CafeScene {
     const layoutIdx = isCenter ? 0 : seed % TILE_LAYOUTS.length;
 
     if (isCenter) {
-      // 중앙 타일: 카운터 주변 테이블 4개 (TILE_SIZE=10, 카운터 ±2.5/±1.6 밖에 배치)
+      // 중앙 타일: 카운터(x:±2.5, z:±1.6) 주변에 6개 테이블 — 원점에서 ≥4.0 거리
       const periphery = [
-        { x: -3.8, z: -3.8 }, { x: 0.4, z: -4.2 },
-        { x: -4.2, z: 3.8 },  { x: 4.0, z: -3.6 },
+        { x: -3.5, z: -3.5 },  // SW
+        { x:  3.5, z: -3.5 },  // SE
+        { x: -4.2, z:  0.2 },  // W
+        { x:  4.2, z:  0.2 },  // E
+        { x: -3.0, z:  3.5 },  // NW
+        { x:  3.0, z:  3.5 },  // NE
       ];
       periphery.forEach((pos, i) => {
         const id = `table_${startIdx + i}`;
@@ -791,7 +793,7 @@ export class CafeScene {
 
     if (this._staffCatGroup) {
       const sprite = this._staffCatGroup.children[0];
-      if (sprite?.isSprite) sprite.position.y = 0.46 + Math.sin(time * 1.3) * 0.025;
+      if (sprite?.isSprite) sprite.position.y = 0.62 + Math.sin(time * 1.3) * 0.025;
     }
   }
 
