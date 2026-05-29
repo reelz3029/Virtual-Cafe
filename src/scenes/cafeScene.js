@@ -13,11 +13,11 @@ import {
 import { store } from '../store/gameStore.js';
 
 // ── 타일 월드 상수 ─────────────────────────────────────────
-const TILE_SIZE   = 12;   // 타일 하나의 월드 크기
+const TILE_SIZE   = 10;   // 타일 하나의 월드 크기
 const GRID_DIM    = 5;    // 5×5 그리드
 const HALF_G      = 2;    // (GRID_DIM-1)/2
 const WRAP_LIMIT  = TILE_SIZE * (HALF_G + 0.5);  // 이 거리 넘으면 반대쪽으로 랩
-const GRID_SPAN   = TILE_SIZE * GRID_DIM;         // 전체 그리드 크기 60
+const GRID_SPAN   = TILE_SIZE * GRID_DIM;         // 전체 그리드 크기 50
 
 const SEATS_PER_TABLE = 4;
 const TABLE_R         = 0.42;
@@ -60,28 +60,28 @@ function mat(color, opts = {}) {
   return _matCache.get(key);
 }
 
-// ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋, TILE_SIZE=12 기준 ±4) ──
+// ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋, TILE_SIZE=10 기준 ±2.5) ──
 const TILE_LAYOUTS = [
-  [{ x: -3.0, z: -3.0 }, { x: 2.8, z: 2.8 }],
-  [{ x: -2.5, z: 3.8 },  { x: 3.2, z: -2.5 }, { x: 0.5, z: 0.5 }],
-  [{ x: -4.0, z: -0.5 }, { x: 2.8, z: -3.5 }],
-  [{ x: 1.5,  z: 3.8 },  { x: -3.2, z: -1.5 }, { x: 3.8, z: 0.8 }],
-  [{ x: 3.2,  z: 3.2 },  { x: -2.8, z: 1.5 }],
-  [{ x: -3.8, z: -3.5 }, { x: 1.8, z: -2.0 }, { x: -1.2, z: 4.0 }],
-  [{ x: -1.5, z: -3.8 }, { x: 3.5, z: 1.8 }],
-  [{ x: 4.0,  z: -2.0 }, { x: -3.2, z: 3.2 }, { x: 0.8, z: 0.8 }],
+  [{ x: -2.4, z: -2.4 }, { x: 2.2, z: 2.2 }],
+  [{ x: -2.0, z: 3.0 },  { x: 2.6, z: -2.0 }, { x: 0.4, z: 0.4 }],
+  [{ x: -3.2, z: -0.4 }, { x: 2.2, z: -2.8 }],
+  [{ x: 1.2,  z: 3.0 },  { x: -2.6, z: -1.2 }, { x: 3.0, z: 0.6 }],
+  [{ x: 2.6,  z: 2.6 },  { x: -2.2, z: 1.2 }],
+  [{ x: -3.0, z: -2.8 }, { x: 1.4, z: -1.6 }, { x: -1.0, z: 3.2 }],
+  [{ x: -1.2, z: -3.0 }, { x: 2.8, z: 1.4 }],
+  [{ x: 3.2,  z: -1.6 }, { x: -2.6, z: 2.6 }, { x: 0.6, z: 0.6 }],
 ];
 
-// 타일별 램프 오프셋 (타일 중심 기준, TILE_SIZE=12 기준 ±4)
+// 타일별 램프 오프셋 (타일 중심 기준, ±2.5 이내)
 const TILE_LAMPS = [
-  [[-2.5, -1.5], [2.5, 2.5]],
-  [[-3.5,  1.5], [1.8, -3.0]],
-  [[-1.5, -3.5], [3.0,  1.5]],
-  [[ 2.5, -2.5], [-3.0, 3.5]],
-  [[-3.0, -2.5], [2.5,  1.8]],
-  [[-1.8,  3.0], [3.0, -2.5]],
-  [[ 0.5, -3.5], [-3.5, 0.5]],
-  [[ 3.5,  1.2], [-0.8,-3.5]],
+  [[-2.0, -1.2], [2.0, 2.0]],
+  [[-2.8,  1.2], [1.5, -2.4]],
+  [[-1.2, -2.8], [2.4,  1.2]],
+  [[ 2.0, -2.0], [-2.4, 2.8]],
+  [[-2.4, -2.0], [2.0,  1.5]],
+  [[-1.5,  2.4], [2.4, -2.0]],
+  [[ 0.4, -2.8], [-2.8, 0.4]],
+  [[ 2.8,  1.0], [-0.6,-2.8]],
 ];
 
 // ── CafeScene 클래스 ───────────────────────────────────────
@@ -101,6 +101,7 @@ export class CafeScene {
   }
 
   get tableCount() { return this._tableCount; }
+  get gridSpan()   { return GRID_SPAN; }  // 카메라 토로이달 랩핑에 사용
 
   // ── 조명 ─────────────────────────────────────────────────
   _setupLights() {
@@ -420,10 +421,10 @@ export class CafeScene {
     const layoutIdx = isCenter ? 0 : seed % TILE_LAYOUTS.length;
 
     if (isCenter) {
-      // 중앙 타일: 카운터 주변 테이블 4개 (카운터 ±2.5/±1.6 밖으로 배치)
+      // 중앙 타일: 카운터 주변 테이블 4개 (TILE_SIZE=10, 카운터 ±2.5/±1.6 밖에 배치)
       const periphery = [
-        { x: -4.5, z: -4.5 }, { x: 0.5, z: -5.0 },
-        { x: -5.0, z: 4.5 },  { x: 4.8, z: -4.0 },
+        { x: -3.8, z: -3.8 }, { x: 0.4, z: -4.2 },
+        { x: -4.2, z: 3.8 },  { x: 4.0, z: -3.6 },
       ];
       periphery.forEach((pos, i) => {
         const id = `table_${startIdx + i}`;
@@ -445,14 +446,14 @@ export class CafeScene {
       this._addEdisonLampToGroup(group, lx, lz, cordLen, addLight);
     });
 
-    // 화분 (간헐적, TILE_SIZE=12에 맞춰 ±3 이내)
+    // 화분 (간헐적, TILE_SIZE=10 기준 ±2 이내)
     if (seed % 4 === 0) {
-      const px = ((seed % 5) - 2) * 1.4;
-      const pz = ((seed % 7) - 3) * 1.2;
+      const px = ((seed % 5) - 2) * 1.0;
+      const pz = ((seed % 7) - 3) * 0.9;
       this._addFloorPlantToGroup(group, px, pz);
     } else if (seed % 6 === 2) {
-      const px = ((seed % 4) - 1.5) * 1.6;
-      const pz = ((seed % 5) - 2) * 1.4;
+      const px = ((seed % 4) - 1.5) * 1.2;
+      const pz = ((seed % 5) - 2) * 1.0;
       this._addTallPlantToGroup(group, px, pz);
     }
 

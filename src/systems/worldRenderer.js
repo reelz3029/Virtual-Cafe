@@ -371,8 +371,19 @@ export class WorldRenderer {
   }
 
   // ── 카메라 업데이트 ──────────────────────────────────────
+  // 토로이달 랩핑: 한 방향으로 계속 이동하면 월드 경계를 넘어 반대편에서 나타남
+  // → 카메라가 세계를 한 바퀴 돌면 시작 지점으로 돌아오는 진짜 무한 맵
   _updateCameraPosition() {
     const { target } = this._cam;
+
+    const span = this._activeScene?.gridSpan;
+    if (span) {
+      const half = span / 2;
+      // ((v + half) % span + span) % span - half → [-half, +half) 범위로 랩
+      target.x = ((target.x + half) % span + span) % span - half;
+      target.z = ((target.z + half) % span + span) % span - half;
+    }
+
     this.camera.position.set(target.x + 9, 9, target.z + 9);
     this.camera.lookAt(target);
   }
