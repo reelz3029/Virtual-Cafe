@@ -46,19 +46,19 @@ export class HUD {
 /* 상단 바 */
 .hud-top {
   position: absolute;
-  top: 16px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(196,160,106,0.3);
-  border-radius: 14px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 16px rgba(26,15,8,0.1);
-  min-width: 320px;
+  background: rgba(255,248,242,0.90);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(200,150,80,0.25);
+  border-radius: 16px;
+  padding: 7px 12px;
+  box-shadow: 0 3px 18px rgba(26,12,6,0.10), 0 1px 4px rgba(160,90,20,0.08);
+  min-width: 300px;
   max-width: calc(100vw - 32px);
 }
 
@@ -67,15 +67,16 @@ export class HUD {
   font-family: 'Gowun Batang', serif;
   font-size: 15px;
   font-weight: 700;
-  color: #5A3E18;
+  color: #5A3818;
   white-space: nowrap;
   margin-right: 4px;
+  letter-spacing: .01em;
 }
 
 .hud-divider {
   width: 1px;
   height: 18px;
-  background: rgba(196,160,106,0.4);
+  background: rgba(200,150,80,0.35);
   flex-shrink: 0;
 }
 
@@ -85,19 +86,22 @@ export class HUD {
   align-items: center;
   gap: 4px;
   padding: 5px 10px;
-  background: #F7F0E0;
-  border: 1px solid rgba(196,160,106,0.35);
-  border-radius: 8px;
+  background: rgba(245,224,192,0.7);
+  border: 1px solid rgba(200,150,80,0.28);
+  border-radius: 9px;
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
-  color: #5A3E18;
+  color: #5A3818;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.hud-scene-btn:hover { background: #EDE3CC; }
-.hud-scene-arrow { font-size: 10px; color: #A07840; }
+.hud-scene-btn:hover {
+  background: rgba(232,200,140,0.7);
+  border-color: rgba(200,150,80,.5);
+}
+.hud-scene-arrow { font-size: 9px; color: #A07838; margin-top: 1px; }
 
 /* 접속자 */
 .hud-online {
@@ -105,13 +109,14 @@ export class HUD {
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: #7A5A28;
+  color: #7A5228;
   white-space: nowrap;
 }
 .hud-online-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
   background: #6DB87A;
+  box-shadow: 0 0 0 2px rgba(109,184,122,.2);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -121,61 +126,69 @@ export class HUD {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: rgba(232,184,75,0.12);
-  border: 1px solid rgba(232,184,75,0.3);
-  border-radius: 8px;
+  background: rgba(232,184,75,0.10);
+  border: 1px solid rgba(232,184,75,0.28);
+  border-radius: 9px;
   font-size: 12px;
   font-weight: 600;
   color: #8A6010;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
-.hud-coin:hover { background: rgba(232,184,75,0.2); }
+.hud-coin:hover {
+  background: rgba(232,184,75,0.20);
+  transform: scale(1.03);
+}
 .hud-coin-icon { font-size: 13px; }
 
 /* 사용자 아바타 버튼 */
 .hud-user-btn {
   width: 32px; height: 32px;
-  border-radius: 8px;
-  background: #F7F0E0;
-  border: 1.5px solid rgba(196,160,106,0.4);
+  border-radius: 9px;
+  background: rgba(245,224,192,0.8);
+  border: 1.5px solid rgba(200,150,80,0.35);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
+  font-size: 16px;
   transition: all 0.15s;
   flex-shrink: 0;
+  position: relative;
 }
-.hud-user-btn:hover { background: #EDE3CC; transform: scale(1.05); }
+.hud-user-btn:hover {
+  background: rgba(232,200,140,0.9);
+  transform: scale(1.06);
+  box-shadow: 0 2px 8px rgba(140,80,20,.18);
+}
 
-/* 커피 들고있을 때 */
+/* 커피 뱃지 */
 .hud-coffee-badge {
   position: absolute;
   top: -6px; right: -6px;
   background: #FFF;
   border-radius: 50%;
   width: 16px; height: 16px;
-  font-size: 11px;
+  font-size: 10px;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(196,160,106,0.4);
-  box-shadow: 0 1px 3px rgba(26,15,8,0.1);
+  border: 1px solid rgba(200,150,80,0.35);
+  box-shadow: 0 1px 4px rgba(26,12,6,0.12);
 }
 
 /* 하단 액션바 */
 .hud-bottom {
   position: absolute;
-  bottom: 20px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255,255,255,0.90);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(196,160,106,0.3);
-  border-radius: 16px;
-  padding: 8px 12px;
-  box-shadow: 0 4px 20px rgba(26,15,8,0.12);
+  gap: 4px;
+  background: rgba(255,248,242,0.92);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(200,150,80,0.25);
+  border-radius: 18px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 24px rgba(26,12,6,0.13), 0 2px 6px rgba(160,90,20,0.08);
 }
 
 .hud-action-btn {
@@ -183,44 +196,46 @@ export class HUD {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 7px 12px;
+  padding: 7px 13px;
   background: transparent;
   border: none;
-  border-radius: 10px;
+  border-radius: 11px;
   cursor: pointer;
   transition: all 0.15s;
   font-family: inherit;
-  min-width: 52px;
+  min-width: 54px;
+  position: relative;
 }
-.hud-action-btn:hover { background: #F7F0E0; }
-.hud-action-btn.active { background: rgba(122,90,40,0.1); }
+.hud-action-btn:hover {
+  background: rgba(245,224,192,0.8);
+  transform: translateY(-1px);
+}
+.hud-action-btn:active { transform: translateY(0); }
+.hud-action-btn.active {
+  background: rgba(168,120,56,0.12);
+  box-shadow: inset 0 1px 3px rgba(90,52,18,.08);
+}
 .hud-action-icon { font-size: 20px; line-height: 1; }
 .hud-action-label {
   font-size: 10px;
   font-weight: 500;
-  color: #7A5A28;
+  color: #7A5228;
   white-space: nowrap;
 }
 
-/* 커피 아이콘 (갖고 있을 때 특별 표시) */
-.hud-coffee-held {
-  position: relative;
-}
-.hud-coffee-held .hud-action-icon {
-  animation: float 2s ease-in-out infinite;
-}
+.hud-coffee-held .hud-action-icon { animation: float 2s ease-in-out infinite; }
 
-/* 씬 선택 드롭다운 */
+/* 씬 드롭다운 */
 .scene-dropdown {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  background: #FFFFFF;
-  border: 1px solid rgba(196,160,106,0.3);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(26,15,8,0.12);
+  background: #FFF;
+  border: 1px solid rgba(200,150,80,0.25);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(26,12,6,0.13);
   overflow: hidden;
-  min-width: 140px;
+  min-width: 150px;
   animation: fadeInDown 0.2s ease both;
   z-index: 50;
 }
@@ -230,7 +245,7 @@ export class HUD {
   gap: 8px;
   padding: 10px 14px;
   font-size: 13px;
-  color: #5A3E18;
+  color: #5A3818;
   cursor: pointer;
   transition: background 0.1s;
   border: none;
@@ -239,26 +254,26 @@ export class HUD {
   text-align: left;
   font-family: inherit;
 }
-.scene-item:hover { background: #F7F0E0; }
-.scene-item.current { background: #F7F0E0; font-weight: 500; }
+.scene-item:hover { background: #FFF5E8; }
+.scene-item.current { background: #FFF5E8; font-weight: 500; }
 .scene-item-badge {
   margin-left: auto;
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(196,160,106,0.2);
-  color: #A07840;
+  background: rgba(200,160,80,0.16);
+  color: #A07838;
 }
 
 /* 유저 메뉴 드롭다운 */
 .user-dropdown {
   position: fixed;
-  top: 64px;
+  top: 60px;
   right: 16px;
-  background: #FFFFFF;
-  border: 1px solid rgba(196,160,106,0.25);
-  border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(26,15,8,0.14);
+  background: #FFF;
+  border: 1px solid rgba(200,150,80,0.22);
+  border-radius: 16px;
+  box-shadow: 0 10px 36px rgba(26,12,6,0.15);
   overflow: hidden;
   min-width: 200px;
   animation: fadeInDown 0.2s ease both;
@@ -266,26 +281,18 @@ export class HUD {
 }
 .user-menu-header {
   padding: 14px 16px;
-  background: #FDFAF4;
-  border-bottom: 1px solid rgba(196,160,106,0.15);
+  background: linear-gradient(135deg, #FFF8F0 0%, #FFF0DC 100%);
+  border-bottom: 1px solid rgba(200,150,80,0.14);
 }
-.user-menu-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: #3C2810;
-}
-.user-menu-email {
-  font-size: 11.5px;
-  color: #A07840;
-  margin-top: 2px;
-}
+.user-menu-name { font-weight: 700; font-size: 14px; color: #3A2410; }
+.user-menu-email { font-size: 11.5px; color: #A07838; margin-top: 2px; }
 .user-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
   font-size: 13px;
-  color: #5A3E18;
+  color: #5A3818;
   cursor: pointer;
   transition: background 0.1s;
   border: none;
@@ -294,22 +301,23 @@ export class HUD {
   text-align: left;
   font-family: inherit;
 }
-.user-menu-item:hover { background: #F7F0E0; }
+.user-menu-item:hover { background: #FFF5E8; }
 .user-menu-item.danger { color: #C03030; }
-.user-menu-item.danger:hover { background: rgba(212,96,90,0.06); }
+.user-menu-item.danger:hover { background: rgba(208,88,74,.06); }
 
 /* 힌트 텍스트 */
 .hud-hint {
   position: absolute;
-  bottom: 84px;
+  bottom: 82px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11.5px;
-  color: rgba(122,90,40,0.7);
-  background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(4px);
-  padding: 4px 10px;
-  border-radius: 6px;
+  color: rgba(122,82,30,0.75);
+  background: rgba(255,248,242,0.82);
+  backdrop-filter: blur(6px);
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(200,150,80,0.18);
   white-space: nowrap;
   pointer-events: none;
   animation: fadeIn 0.5s ease both;

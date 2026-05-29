@@ -35,17 +35,17 @@ export class AuthModal {
   _getHTML() {
     return `
 <style>
-/* ── 전역 애니메이션 (중복 방지를 위해 한 번만 정의) ── */
 @keyframes auth-fadeIn  { from { opacity:0 } to { opacity:1 } }
-@keyframes auth-scaleIn { from { opacity:0; transform:scale(.94) } to { opacity:1; transform:scale(1) } }
-@keyframes auth-float   { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-6px) } }
+@keyframes auth-scaleIn { from { opacity:0; transform:scale(.93) translateY(10px) } to { opacity:1; transform:scale(1) translateY(0) } }
+@keyframes auth-float   { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-7px) } }
 @keyframes auth-shimmer { from{ transform:translateX(-100%) } to{ transform:translateX(100%) } }
+@keyframes auth-tail    { 0%,100%{ transform:rotate(-10deg) } 50%{ transform:rotate(10deg) } }
 
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, rgba(253,250,244,.92) 0%, rgba(237,224,196,.88) 100%);
-  backdrop-filter: blur(8px);
+  background: radial-gradient(ellipse at 40% 60%, rgba(240,200,140,.55) 0%, rgba(255,248,242,.94) 100%);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,41 +54,92 @@ export class AuthModal {
   animation: auth-fadeIn .3s ease both;
 }
 
-.auth-card {
-  background: #fff;
-  border: 1px solid rgba(196,160,106,.25);
-  border-radius: 20px;
-  box-shadow: 0 4px 24px rgba(58,40,16,.10), 0 1px 4px rgba(58,40,16,.06);
-  width: 100%;
-  max-width: 400px;
-  padding: 40px 36px 32px;
-  animation: auth-scaleIn .35s cubic-bezier(.34,1.56,.64,1) both;
+/* 배경 장식 패턴 */
+.auth-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(180,120,60,.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
 }
 
-/* 로고 */
-.auth-logo { text-align:center; margin-bottom:28px; }
-.auth-logo-icon {
-  font-size: 40px;
-  display: block;
-  margin-bottom: 10px;
-  animation: auth-float 3s ease-in-out infinite;
+.auth-card {
+  background: #fff;
+  border: 1.5px solid rgba(200,160,90,.22);
+  border-radius: 24px;
+  box-shadow: 0 8px 40px rgba(58,36,12,.12), 0 2px 8px rgba(58,36,12,.06);
+  width: 100%;
+  max-width: 400px;
+  padding: 0 0 28px;
+  animation: auth-scaleIn .4s cubic-bezier(.34,1.56,.64,1) both;
+  overflow: hidden;
+  position: relative;
 }
+
+/* 상단 따뜻한 헤더 영역 */
+.auth-header-bg {
+  background: linear-gradient(160deg, #FFF0DC 0%, #F5D8A8 100%);
+  padding: 28px 24px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-bottom: 1px solid rgba(200,150,80,.15);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 헤더 배경 커피잔 장식 */
+.auth-header-bg::after {
+  content: '☕';
+  position: absolute;
+  right: 18px;
+  bottom: 8px;
+  font-size: 52px;
+  opacity: .09;
+  pointer-events: none;
+}
+
+/* 고양이 SVG 아이콘 */
+.auth-cat-wrap {
+  animation: auth-float 3.2s ease-in-out infinite;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 12px rgba(140,80,20,.18));
+}
+.auth-cat-tail-anim {
+  transform-origin: 48px 72px;
+  animation: auth-tail 2s ease-in-out infinite;
+}
+
 .auth-logo h1 {
   font-family: 'Gowun Batang', serif;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
-  color: #5A3E18;
-  letter-spacing: -.02em;
+  color: #5A3818;
+  letter-spacing: .01em;
   margin: 0 0 4px;
+  text-align: center;
 }
-.auth-logo p { font-size:13px; color:#A07840; margin:0; }
+.auth-logo p {
+  font-size: 12.5px;
+  color: #A07838;
+  margin: 0;
+  text-align: center;
+  letter-spacing: .02em;
+}
+
+/* 카드 본문 */
+.auth-body {
+  padding: 22px 28px 0;
+}
 
 /* 에러 */
 .auth-error {
   padding: 9px 12px;
-  background: rgba(212,96,90,.08);
-  border: 1px solid rgba(212,96,90,.25);
-  border-radius: 8px;
+  background: rgba(208,88,74,.07);
+  border: 1px solid rgba(208,88,74,.22);
+  border-radius: 10px;
   font-size: 12.5px;
   color: #B03030;
   margin-bottom: 14px;
@@ -104,7 +155,6 @@ export class AuthModal {
   margin-bottom: 4px;
 }
 
-/* GIS 라이브러리 미로드 시 표시하는 커스텀 버튼 */
 .btn-google-fallback {
   width: 100%;
   display: flex;
@@ -113,20 +163,21 @@ export class AuthModal {
   gap: 10px;
   padding: 11px 16px;
   background: #fff;
-  border: 1.5px solid #dadce0;
-  border-radius: 11px;
+  border: 1.5px solid #e0d4c4;
+  border-radius: 12px;
   font-family: 'DM Sans', sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #3c4043;
   cursor: pointer;
-  transition: background .15s, box-shadow .15s;
+  transition: background .15s, box-shadow .15s, border-color .15s;
 }
 .btn-google-fallback:hover {
-  background: #f8f9fa;
-  box-shadow: 0 1px 4px rgba(60,64,67,.15);
+  background: #fdf8f0;
+  border-color: #c8a870;
+  box-shadow: 0 2px 8px rgba(160,100,40,.12);
 }
-.btn-google-fallback:active { background:#f1f3f4; }
+.btn-google-fallback:active { background:#f5eedd; }
 .btn-google-fallback.loading {
   opacity: .7;
   pointer-events: none;
@@ -140,18 +191,15 @@ export class AuthModal {
   background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.4) 50%, transparent 100%);
   animation: auth-shimmer 1.2s infinite;
 }
-.google-icon {
-  width: 18px; height: 18px;
-  flex-shrink: 0;
-}
+.google-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
 /* 구분선 */
 .auth-divider {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 16px 0;
-  color: #C4A06A;
+  margin: 14px 0;
+  color: #C8A068;
   font-size: 12px;
 }
 .auth-divider::before,
@@ -159,28 +207,33 @@ export class AuthModal {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(196,160,106,.3);
+  background: rgba(200,160,100,.28);
 }
 
 /* 게스트 버튼 */
 .btn-guest {
   width: 100%;
-  padding: 10px;
-  background: #F7F0E0;
-  color: #7A5A28;
-  border: 1.5px solid rgba(196,160,106,.35);
-  border-radius: 11px;
+  padding: 11px;
+  background: #FFF5E8;
+  color: #7A5228;
+  border: 1.5px solid rgba(200,150,80,.32);
+  border-radius: 12px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: all .15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
 }
-.btn-guest:hover { background:#EDE3CC; border-color:rgba(196,160,106,.6); }
+.btn-guest:hover {
+  background: #F5E8D0;
+  border-color: rgba(200,150,80,.6);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(160,90,30,.12);
+}
 
 /* 게스트 닉네임 폼 */
 .guest-nickname-form {
@@ -189,58 +242,60 @@ export class AuthModal {
   gap: 10px;
 }
 .input-group { display:flex; flex-direction:column; gap:5px; }
-.input-group label { font-size:12px; font-weight:500; color:#7A5A28; }
+.input-group label { font-size:12px; font-weight:600; color:#7A5228; letter-spacing:.02em; }
 .input-group input {
   padding: 10px 13px;
   font-family: 'DM Sans', sans-serif;
   font-size: 14px;
-  color: #3C2810;
-  background: #FDFAF4;
-  border: 1.5px solid rgba(196,160,106,.3);
-  border-radius: 10px;
+  color: #3A2410;
+  background: #FFF8F0;
+  border: 1.5px solid rgba(200,150,80,.28);
+  border-radius: 11px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
 }
-.input-group input::placeholder { color:#C4A06A; }
+.input-group input::placeholder { color:#C8A068; }
 .input-group input:focus {
-  border-color: #A07840;
-  box-shadow: 0 0 0 3px rgba(160,120,64,.12);
+  border-color: #A87838;
+  box-shadow: 0 0 0 3px rgba(200,150,80,.13);
   background: #fff;
 }
-.guest-form-actions {
-  display: flex;
-  gap: 8px;
-}
+.guest-form-actions { display: flex; gap: 8px; }
 .btn-guest-cancel {
   flex: 0 0 auto;
   padding: 10px 14px;
-  background: #F7F0E0;
-  color: #7A5A28;
-  border: 1.5px solid rgba(196,160,106,.35);
-  border-radius: 10px;
+  background: #FFF0E0;
+  color: #7A5228;
+  border: 1.5px solid rgba(200,150,80,.3);
+  border-radius: 11px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background .15s;
 }
-.btn-guest-cancel:hover { background:#EDE3CC; }
+.btn-guest-cancel:hover { background:#F5E0C8; }
 .btn-guest-confirm {
   flex: 1;
-  padding: 10px;
-  background: #7A5A28;
-  color: #F7F0E0;
+  padding: 11px;
+  background: linear-gradient(160deg, #8B5428 0%, #6A3C1A 100%);
+  color: #FFF0E0;
   border: none;
-  border-radius: 10px;
+  border-radius: 11px;
   font-family: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all .15s;
   position: relative;
   overflow: hidden;
+  letter-spacing: .02em;
 }
-.btn-guest-confirm:hover { background:#5A3E18; transform:translateY(-1px); box-shadow:0 4px 12px rgba(90,62,24,.25); }
+.btn-guest-confirm:hover {
+  background: linear-gradient(160deg, #9A6030 0%, #7A4620 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(90,52,18,.28);
+}
 .btn-guest-confirm:active { transform:translateY(0); }
 .btn-guest-confirm.loading { opacity:.7; pointer-events:none; }
 .btn-guest-confirm.loading::after {
@@ -256,53 +311,99 @@ export class AuthModal {
   width: 100%;
   padding: 10px 14px;
   background: rgba(90,140,212,.07);
-  border: 1px solid rgba(90,140,212,.25);
+  border: 1px solid rgba(90,140,212,.22);
   border-radius: 10px;
   font-size: 12px;
   color: #3050A0;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 </style>
 
 <div class="auth-card">
-  <div class="auth-logo">
-    <span class="auth-logo-icon">☕</span>
-    <h1>Somewhere</h1>
-    <p>가상의 카페에서 함께 작업해요</p>
+  <!-- 따뜻한 헤더 -->
+  <div class="auth-header-bg">
+    <!-- 고양이 일러스트 -->
+    <div class="auth-cat-wrap">
+      <svg width="88" height="96" viewBox="0 0 88 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- 꼬리 -->
+        <g class="auth-cat-tail-anim">
+          <path d="M58 76 Q78 66 72 50" stroke="#E8A060" stroke-width="7.5" stroke-linecap="round" fill="none"/>
+          <path d="M58 76 Q78 66 72 50" stroke="#5A3418" stroke-width="2" stroke-linecap="round" fill="none"/>
+        </g>
+        <!-- 왼쪽 귀 -->
+        <path d="M18 34 L6 10 L26 28" fill="#F0C080" stroke="#5A3418" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M19 32 L11 15 L24 26" fill="#EFA090" stroke="none"/>
+        <!-- 오른쪽 귀 -->
+        <path d="M62 34 L74 10 L54 28" fill="#F0C080" stroke="#5A3418" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M61 32 L69 15 L56 26" fill="#EFA090" stroke="none"/>
+        <!-- 머리 -->
+        <ellipse cx="40" cy="46" rx="26" ry="24" fill="#F5C880" stroke="#5A3418" stroke-width="2"/>
+        <!-- 머리 무늬 -->
+        <path d="M30 30 Q40 27 50 30" stroke="#D49848" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.55"/>
+        <!-- 눈 -->
+        <path d="M27 44 Q31 40 35 44" stroke="#3A2010" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+        <path d="M45 44 Q49 40 53 44" stroke="#3A2010" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+        <!-- 코 -->
+        <path d="M37 52 L40 55.5 L43 52 Z" fill="#E87888"/>
+        <!-- 입 -->
+        <path d="M37 55.5 Q40 59 43 55.5" stroke="#5A3418" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <!-- 볼터치 -->
+        <ellipse cx="27" cy="54" rx="7" ry="4.5" fill="rgba(228,130,110,.30)"/>
+        <ellipse cx="53" cy="54" rx="7" ry="4.5" fill="rgba(228,130,110,.30)"/>
+        <!-- 수염 -->
+        <line x1="4" y1="50" x2="22" y2="52" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="4" y1="55" x2="22" y2="55" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="76" y1="50" x2="58" y2="52" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="76" y1="55" x2="58" y2="55" stroke="#5A3418" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- 몸통 -->
+        <ellipse cx="40" cy="80" rx="22" ry="19" fill="#F5C880" stroke="#5A3418" stroke-width="2"/>
+        <!-- 앞발 -->
+        <ellipse cx="25" cy="91" rx="10" ry="6" fill="#F0B870" stroke="#5A3418" stroke-width="1.8"/>
+        <ellipse cx="52" cy="91" rx="10" ry="6" fill="#F0B870" stroke="#5A3418" stroke-width="1.8"/>
+        <!-- 발가락 선 -->
+        <path d="M20 91 Q25 95 30 91" stroke="#5A3418" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <path d="M47 91 Q52 95 57 91" stroke="#5A3418" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <!-- 로고 텍스트 -->
+    <div class="auth-logo">
+      <h1>Somewhere</h1>
+      <p>따뜻한 고양이 카페에서 함께해요 ☕</p>
+    </div>
   </div>
 
-  <div class="auth-error" id="auth-error"></div>
+  <!-- 본문 -->
+  <div class="auth-body">
+    <div class="auth-error" id="auth-error"></div>
 
-  <!-- Google 로그인 버튼 (GIS 라이브러리가 렌더링) -->
-  <div class="google-btn-wrapper">
-    <div id="google-btn-container" style="width:100%">
-      <!-- GIS 로드 전 스켈레톤 -->
-      <div style="height:44px;background:#f0ece4;border-radius:11px;animation:auth-shimmer 1.5s infinite;overflow:hidden;position:relative;">
-        <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:auth-shimmer 1.5s infinite;"></div>
+    <div class="google-btn-wrapper">
+      <div id="google-btn-container" style="width:100%">
+        <div style="height:44px;background:#f5eedd;border-radius:12px;overflow:hidden;position:relative;">
+          <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:auth-shimmer 1.5s infinite;"></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="auth-divider">또는</div>
+    <div class="auth-divider">또는</div>
 
-  <!-- 게스트 섹션 -->
-  <div id="guest-section">
-    <button class="btn-guest" id="btn-guest-toggle">
-      <span>👤</span>
-      <span>닉네임으로 게스트 입장</span>
-    </button>
-  </div>
-
-  <!-- 게스트 닉네임 폼 (기본 숨김) -->
-  <div class="guest-nickname-form" id="guest-nickname-form" style="display:none">
-    <div class="input-group">
-      <label>닉네임</label>
-      <input type="text" id="guest-nickname" placeholder="2~12자" maxlength="12" autocomplete="off" />
+    <div id="guest-section">
+      <button class="btn-guest" id="btn-guest-toggle">
+        <span>🐾</span>
+        <span>닉네임으로 게스트 입장</span>
+      </button>
     </div>
-    <div class="guest-form-actions">
-      <button class="btn-guest-cancel" id="btn-guest-cancel">취소</button>
-      <button class="btn-guest-confirm" id="btn-guest-confirm">입장하기 →</button>
+
+    <div class="guest-nickname-form" id="guest-nickname-form" style="display:none">
+      <div class="input-group">
+        <label>닉네임</label>
+        <input type="text" id="guest-nickname" placeholder="2~12자로 입력해주세요" maxlength="12" autocomplete="off" />
+      </div>
+      <div class="guest-form-actions">
+        <button class="btn-guest-cancel" id="btn-guest-cancel">취소</button>
+        <button class="btn-guest-confirm" id="btn-guest-confirm">입장하기 →</button>
+      </div>
     </div>
   </div>
 </div>

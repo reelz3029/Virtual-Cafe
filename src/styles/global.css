@@ -1,42 +1,44 @@
 /* ============================================================
    global.css — 전역 디자인 토큰 & 베이스 스타일
-   Somewhere Virtual Café
+   Somewhere Virtual Café — lo-fi cat cafe theme
    ============================================================ */
 
 /* ── 디자인 토큰 ─────────────────────────────────────────── */
 :root {
-  /* 컬러 팔레트 — 따뜻한 카페 무드 */
-  --cream-50:  #FDFAF4;
-  --cream-100: #F7F0E0;
-  --cream-200: #EDE0C4;
-  --cream-300: #DCC9A0;
-  --brown-400: #C4A06A;
-  --brown-500: #A07840;
-  --brown-600: #7A5A28;
-  --brown-700: #5A3E18;
-  --brown-800: #3C2810;
+  /* 컬러 팔레트 — 따뜻한 amber/peach 고양이 카페 무드 */
+  --cream-50:  #FFF8F2;
+  --cream-100: #FFF0E0;
+  --cream-200: #F5DFC0;
+  --cream-300: #E8C898;
+  --brown-400: #C8A068;
+  --brown-500: #A87838;
+  --brown-600: #7A5228;
+  --brown-700: #5A3818;
+  --brown-800: #3A2410;
 
-  --espresso:  #1A0F08;
-  --latte:     #E8D5B0;
-  --matcha:    #7DA87B;
+  --espresso:  #1A0C06;
+  --latte:     #F0D4A8;
+  --matcha:    #7A9A68;
   --sky:       #8FB8D4;
-  --rose:      #D4948A;
-  --lavender:  #A898C8;
+  --rose:      #D4A08A;
+  --lavender:  #B0A8D0;
+  --peach:     #F0C0A0;
+  --amber:     #E8A050;
 
   /* 시맨틱 컬러 */
   --bg-primary:    var(--cream-50);
   --bg-surface:    var(--cream-100);
   --bg-elevated:   #FFFFFF;
-  --bg-overlay:    rgba(26, 15, 8, 0.72);
+  --bg-overlay:    rgba(26, 12, 6, 0.72);
 
   --text-primary:  var(--brown-700);
   --text-secondary: var(--brown-500);
   --text-muted:    var(--brown-400);
   --text-inverse:  var(--cream-100);
 
-  --border-light:  rgba(160, 120, 64, 0.18);
-  --border-mid:    rgba(160, 120, 64, 0.35);
-  --border-strong: rgba(160, 120, 64, 0.6);
+  --border-light:  rgba(180, 120, 60, 0.16);
+  --border-mid:    rgba(180, 120, 60, 0.32);
+  --border-strong: rgba(180, 120, 60, 0.58);
 
   --accent-primary: var(--brown-600);
   --accent-hover:   var(--brown-700);
@@ -44,7 +46,7 @@
 
   --online-green: #6DB87A;
   --coin-gold:    #E8B84B;
-  --danger:       #D4605A;
+  --danger:       #D0584A;
   --info:         #5A8CD4;
 
   /* 타이포그래피 */
@@ -76,13 +78,15 @@
   --radius-sm:  6px;
   --radius-md:  10px;
   --radius-lg:  16px;
-  --radius-xl:  24px;
+  --radius-xl:  22px;
+  --radius-2xl: 28px;
   --radius-full: 9999px;
 
-  --shadow-sm:  0 1px 3px rgba(26,15,8,0.08), 0 1px 2px rgba(26,15,8,0.04);
-  --shadow-md:  0 4px 12px rgba(26,15,8,0.10), 0 2px 4px rgba(26,15,8,0.06);
-  --shadow-lg:  0 16px 40px rgba(26,15,8,0.14), 0 4px 12px rgba(26,15,8,0.08);
-  --shadow-xl:  0 32px 64px rgba(26,15,8,0.18);
+  --shadow-sm:  0 1px 4px rgba(26,12,6,0.08), 0 1px 2px rgba(26,12,6,0.04);
+  --shadow-md:  0 4px 14px rgba(26,12,6,0.10), 0 2px 4px rgba(26,12,6,0.06);
+  --shadow-lg:  0 16px 40px rgba(26,12,6,0.14), 0 4px 12px rgba(26,12,6,0.08);
+  --shadow-xl:  0 32px 64px rgba(26,12,6,0.18);
+  --shadow-warm: 0 8px 28px rgba(200,120,40,0.15);
 
   /* 전환 */
   --transition-fast:   150ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -132,9 +136,7 @@ body {
   z-index: var(--z-world);
   cursor: grab;
 }
-#world-canvas:active {
-  cursor: grabbing;
-}
+#world-canvas:active { cursor: grabbing; }
 
 /* ── 앱 & UI 오버레이 ─────────────────────────────────────── */
 #app {
@@ -143,9 +145,7 @@ body {
   z-index: var(--z-hud);
   pointer-events: none;
 }
-#app > * {
-  pointer-events: auto;
-}
+#app > * { pointer-events: auto; }
 
 #ui-overlay {
   position: fixed;
@@ -153,9 +153,7 @@ body {
   z-index: var(--z-panel);
   pointer-events: none;
 }
-#ui-overlay > * {
-  pointer-events: auto;
-}
+#ui-overlay > * { pointer-events: auto; }
 
 /* ── 공통 컴포넌트 ────────────────────────────────────────── */
 
@@ -186,11 +184,11 @@ body {
 .btn-primary {
   background: var(--brown-600);
   color: var(--cream-100);
-  box-shadow: 0 1px 3px rgba(90,62,24,0.3);
+  box-shadow: 0 1px 4px rgba(90,56,24,0.28);
 }
 .btn-primary:hover {
   background: var(--brown-700);
-  box-shadow: 0 2px 8px rgba(90,62,24,0.4);
+  box-shadow: 0 3px 10px rgba(90,56,24,0.38);
   transform: translateY(-1px);
 }
 .btn-primary:active {
@@ -213,9 +211,7 @@ body {
   background: var(--cream-200);
   color: var(--brown-600);
 }
-.btn-soft:hover {
-  background: var(--cream-300);
-}
+.btn-soft:hover { background: var(--cream-300); }
 
 .btn-sm {
   padding: var(--space-1) var(--space-3);
@@ -236,9 +232,7 @@ body {
   border-radius: var(--radius-md);
 }
 
-.btn-round {
-  border-radius: var(--radius-full);
-}
+.btn-round { border-radius: var(--radius-full); }
 
 /* 카드 */
 .card {
@@ -249,12 +243,19 @@ body {
 }
 
 .card-glass {
-  background: rgba(253, 250, 244, 0.88);
+  background: rgba(255, 248, 242, 0.88);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  border: 1px solid rgba(220, 201, 160, 0.5);
+  border: 1px solid rgba(220, 180, 120, 0.45);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+}
+
+.card-doodle {
+  background: var(--bg-elevated);
+  border: 1.5px dashed rgba(180, 120, 60, 0.35);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-warm);
 }
 
 /* 입력 필드 */
@@ -270,12 +271,10 @@ body {
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-.input::placeholder {
-  color: var(--text-muted);
-}
+.input::placeholder { color: var(--text-muted); }
 .input:focus {
   border-color: var(--brown-400);
-  box-shadow: 0 0 0 3px rgba(160,120,64,0.12);
+  box-shadow: 0 0 0 3px rgba(200,160,100,0.14);
   background: var(--bg-elevated);
 }
 
@@ -291,15 +290,15 @@ body {
   white-space: nowrap;
 }
 .badge-green {
-  background: rgba(109,184,122,0.15);
+  background: rgba(109,184,122,0.14);
   color: #3A7A46;
 }
 .badge-gold {
-  background: rgba(232,184,75,0.18);
+  background: rgba(232,184,75,0.16);
   color: #8A6010;
 }
 .badge-info {
-  background: rgba(90,140,212,0.15);
+  background: rgba(90,140,212,0.13);
   color: #2A5A9A;
 }
 
@@ -325,9 +324,7 @@ body {
   background: var(--border-mid);
   border-radius: var(--radius-full);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
-}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
 /* 애니메이션 키프레임 */
 @keyframes fadeIn {
@@ -335,23 +332,23 @@ body {
   to   { opacity: 1; }
 }
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeInDown {
-  from { opacity: 0; transform: translateY(-12px); }
+  from { opacity: 0; transform: translateY(-14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.94); }
+  from { opacity: 0; transform: scale(0.93); }
   to   { opacity: 1; transform: scale(1); }
 }
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(24px); }
+  from { opacity: 0; transform: translateX(26px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-24px); }
+  from { opacity: 0; transform: translateX(-26px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes pulse {
@@ -364,15 +361,23 @@ body {
 }
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-6px); }
+  50%       { transform: translateY(-7px); }
 }
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  from { opacity: 0; transform: translateY(-18px) scale(0.95); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes toast-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(-10px) scale(0.96); }
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50%       { transform: rotate(3deg); }
 }
 
 .animate-fadeIn     { animation: fadeIn     var(--transition-base) both; }
@@ -383,7 +388,5 @@ body {
 
 /* 반응형 최소값 */
 @media (max-width: 640px) {
-  :root {
-    --text-base: 14px;
-  }
+  :root { --text-base: 14px; }
 }

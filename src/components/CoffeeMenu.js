@@ -31,25 +31,25 @@ export class CoffeeMenu {
 .coffee-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26,15,8,0.5);
-  backdrop-filter: blur(6px);
+  background: rgba(26,12,6,0.48);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 30;
-  padding-bottom: 0;
   animation: fadeIn 0.2s ease both;
 }
 .coffee-sheet {
-  background: #FFFFFF;
-  border-radius: 20px 20px 0 0;
+  background: #FFF8F2;
+  border-radius: 24px 24px 0 0;
   width: 100%;
   max-width: 480px;
-  padding: 24px 20px 32px;
-  box-shadow: 0 -8px 40px rgba(26,15,8,0.18);
+  padding: 20px 20px 36px;
+  box-shadow: 0 -10px 40px rgba(26,12,6,0.18);
   animation: slideInUp 0.35s cubic-bezier(0.16,1,0.3,1) both;
   max-height: 80vh;
   overflow-y: auto;
+  border-top: 1px solid rgba(200,150,80,0.18);
 }
 @keyframes slideInUp {
   from { transform: translateY(100%); opacity: 0.8; }
@@ -57,8 +57,8 @@ export class CoffeeMenu {
 }
 
 .coffee-handle {
-  width: 36px; height: 4px;
-  background: rgba(196,160,106,0.4);
+  width: 38px; height: 4px;
+  background: rgba(200,150,80,0.36);
   border-radius: 2px;
   margin: 0 auto 20px;
 }
@@ -66,13 +66,13 @@ export class CoffeeMenu {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .coffee-title {
   font-family: 'Gowun Batang', serif;
   font-size: 20px;
   font-weight: 700;
-  color: #3C2810;
+  color: #3A2410;
 }
 .coffee-coins {
   display: flex;
@@ -82,8 +82,8 @@ export class CoffeeMenu {
   font-weight: 600;
   color: #8A6010;
   background: rgba(232,184,75,0.12);
-  border: 1px solid rgba(232,184,75,0.3);
-  border-radius: 8px;
+  border: 1px solid rgba(232,184,75,0.28);
+  border-radius: 10px;
   padding: 5px 10px;
 }
 
@@ -93,12 +93,12 @@ export class CoffeeMenu {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: rgba(122,90,40,0.06);
-  border: 1px solid rgba(196,160,106,0.25);
-  border-radius: 12px;
-  margin-bottom: 16px;
+  background: rgba(168,120,56,0.06);
+  border: 1px solid rgba(200,150,80,0.22);
+  border-radius: 14px;
+  margin-bottom: 14px;
   font-size: 12.5px;
-  color: #5A3E18;
+  color: #5A3818;
 }
 .coffee-held-emoji { font-size: 22px; animation: float 2s ease-in-out infinite; }
 
@@ -114,39 +114,38 @@ export class CoffeeMenu {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 14px 10px;
-  background: #FDFAF4;
-  border: 1.5px solid rgba(196,160,106,0.2);
-  border-radius: 14px;
+  padding: 16px 10px 12px;
+  background: #FFFFFF;
+  border: 1.5px solid rgba(200,150,80,0.18);
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s;
   text-align: center;
   font-family: inherit;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 2px 6px rgba(26,12,6,0.04);
+}
+.coffee-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255,248,230,.6) 0%, transparent 60%);
+  pointer-events: none;
 }
 .coffee-item:hover:not(:disabled) {
-  background: #F7F0E0;
-  border-color: rgba(196,160,106,0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(26,15,8,0.08);
+  background: #FFF5E8;
+  border-color: rgba(200,150,80,0.45);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(140,80,20,0.12);
 }
-.coffee-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.coffee-item:active:not(:disabled) { transform: translateY(0); }
+.coffee-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.coffee-item:active:not(:disabled) { transform: translateY(-1px); }
 
-.coffee-emoji { font-size: 28px; }
-.coffee-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #3C2810;
-}
-.coffee-desc {
-  font-size: 10.5px;
-  color: #A07840;
-}
+.coffee-emoji { font-size: 30px; }
+.coffee-name { font-size: 12.5px; font-weight: 600; color: #3A2410; }
+.coffee-desc { font-size: 10.5px; color: #A07838; }
 .coffee-price {
   display: flex;
   align-items: center;
@@ -156,24 +155,27 @@ export class CoffeeMenu {
   color: #8A6010;
   background: rgba(232,184,75,0.12);
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 /* 닫기 버튼 */
 .btn-close-coffee {
   width: 100%;
   padding: 12px;
-  background: #F7F0E0;
-  color: #7A5A28;
-  border: 1.5px solid rgba(196,160,106,0.25);
-  border-radius: 12px;
+  background: #FFF0E0;
+  color: #7A5228;
+  border: 1.5px solid rgba(200,150,80,0.22);
+  border-radius: 14px;
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
-.btn-close-coffee:hover { background: #EDE3CC; }
+.btn-close-coffee:hover {
+  background: #F5E0C8;
+  transform: translateY(-1px);
+}
 
 /* 코인 부족 경고 */
 .coin-warning {
@@ -189,11 +191,12 @@ export class CoffeeMenu {
 .coin-earn-tip {
   text-align: center;
   font-size: 11px;
-  color: #C4A06A;
+  color: #C8A068;
   margin-bottom: 12px;
-  padding: 6px 10px;
-  background: rgba(232,184,75,0.06);
-  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(232,184,75,0.07);
+  border-radius: 10px;
+  border: 1px dashed rgba(200,150,80,0.25);
 }
 </style>
 

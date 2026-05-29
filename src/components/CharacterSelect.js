@@ -63,8 +63,8 @@ export class CharacterSelect {
 .chara-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26,15,8,0.55);
-  backdrop-filter: blur(6px);
+  background: rgba(26,12,6,0.52);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,58 +72,58 @@ export class CharacterSelect {
   padding: 16px;
 }
 .chara-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(196,160,106,0.25);
-  border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(26,15,8,0.18);
+  background: #FFF8F2;
+  border: 1.5px solid rgba(200,150,80,0.22);
+  border-radius: 24px;
+  box-shadow: 0 10px 44px rgba(26,12,6,0.18);
   width: 100%;
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
-  padding: 32px;
+  padding: 28px;
   animation: scaleIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
 }
 .chara-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 .chara-header h2 {
   font-family: 'Gowun Batang', serif;
   font-size: 20px;
   font-weight: 700;
-  color: #3C2810;
+  color: #3A2410;
   margin: 0;
 }
 .chara-header p {
   font-size: 12px;
-  color: #A07840;
+  color: #A07838;
   margin: 4px 0 0;
 }
 .btn-close-chara {
   width: 32px; height: 32px;
-  border-radius: 8px;
+  border-radius: 9px;
   border: none;
-  background: #F7F0E0;
-  color: #7A5A28;
+  background: #FFF0E0;
+  color: #7A5228;
   cursor: pointer;
   font-size: 16px;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
-.btn-close-chara:hover { background: #EDE3CC; }
+.btn-close-chara:hover { background: #F5E0C8; transform: scale(1.05); }
 
 /* 미리보기 */
 .chara-preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 110px;
-  margin-bottom: 24px;
-  background: linear-gradient(135deg, #F7F0E0 0%, #EDE3CC 100%);
-  border-radius: 14px;
-  border: 1px dashed rgba(196,160,106,0.4);
+  height: 120px;
+  margin-bottom: 22px;
+  background: linear-gradient(135deg, #FFF0DC 0%, #F5DFC0 100%);
+  border-radius: 16px;
+  border: 1.5px dashed rgba(200,150,80,0.36);
   position: relative;
   overflow: hidden;
 }
@@ -135,7 +135,7 @@ export class CharacterSelect {
   transform: translateX(-50%);
   width: 60px;
   height: 10px;
-  background: rgba(196,160,106,0.2);
+  background: rgba(200,150,80,0.18);
   border-radius: 50%;
 }
 #chara-preview-canvas {
@@ -149,10 +149,10 @@ export class CharacterSelect {
 }
 .chara-section-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #A07840;
+  color: #A07838;
   margin-bottom: 10px;
 }
 
@@ -165,16 +165,17 @@ export class CharacterSelect {
 .color-swatch {
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: 9px;
   border: 2.5px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   position: relative;
 }
-.color-swatch:hover { transform: scale(1.1); }
+.color-swatch:hover { transform: scale(1.12); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
 .color-swatch.active {
-  border-color: #3C2810;
+  border-color: #5A3818;
   transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(90,56,24,0.25);
 }
 .color-swatch.active::after {
   content: '✓';
@@ -184,7 +185,7 @@ export class CharacterSelect {
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  color: rgba(0,0,0,0.6);
+  color: rgba(0,0,0,0.55);
 }
 
 /* 장신구 */
@@ -198,21 +199,22 @@ export class CharacterSelect {
   align-items: center;
   gap: 5px;
   padding: 7px 12px;
-  background: #F7F0E0;
-  border: 2px solid transparent;
-  border-radius: 10px;
+  background: #FFF5E8;
+  border: 2px solid rgba(200,150,80,0.2);
+  border-radius: 11px;
   cursor: pointer;
   font-size: 13px;
-  color: #7A5A28;
+  color: #7A5228;
   font-family: inherit;
   font-weight: 500;
   transition: all 0.15s;
 }
-.acc-chip:hover { background: #EDE3CC; }
+.acc-chip:hover { background: #F5E8D0; border-color: rgba(200,150,80,0.4); }
 .acc-chip.active {
-  background: rgba(122,90,40,0.1);
-  border-color: #7A5A28;
-  color: #3C2810;
+  background: rgba(168,120,56,0.10);
+  border-color: #7A5228;
+  color: #3A2410;
+  box-shadow: 0 2px 6px rgba(90,52,18,0.12);
 }
 .acc-chip-emoji { font-size: 16px; }
 
@@ -220,38 +222,39 @@ export class CharacterSelect {
 .chara-actions {
   display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .btn-chara-save {
   flex: 1;
   padding: 12px;
-  background: #7A5A28;
-  color: #F7F0E0;
+  background: linear-gradient(160deg, #8B5428 0%, #6A3C1A 100%);
+  color: #FFF0E0;
   border: none;
-  border-radius: 11px;
+  border-radius: 12px;
   font-family: inherit;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  letter-spacing: .01em;
 }
 .btn-chara-save:hover {
-  background: #5A3E18;
+  background: linear-gradient(160deg, #9A6030 0%, #7A4620 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(90,62,24,0.3);
+  box-shadow: 0 5px 16px rgba(90,52,18,0.28);
 }
 .btn-chara-reset {
   padding: 12px 16px;
-  background: #F7F0E0;
-  color: #A07840;
-  border: 1.5px solid rgba(196,160,106,0.35);
-  border-radius: 11px;
+  background: #FFF0E0;
+  color: #A07838;
+  border: 1.5px solid rgba(200,150,80,0.3);
+  border-radius: 12px;
   font-family: inherit;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
 }
-.btn-chara-reset:hover { background: #EDE3CC; }
+.btn-chara-reset:hover { background: #F5E0C8; }
 </style>
 
 <div class="chara-card">
