@@ -1,7 +1,7 @@
 /**
  * scenes/cafeScene.js
- * 아이소메트릭 코너뷰 카페 씬 — 레퍼런스 이미지 스타일
- * 카메라: (9,9,9) 대각선 코너뷰 / 따뜻한 앰버 벽돌 바닥 / 우측벽 카운터 / 에디슨 램프
+ * 무한 타일 카페 월드 — 5×5 그리드, 중앙 아일랜드 카운터
+ * 카메라: (9,9,9) 대각선 코너뷰 / 타일 랩핑으로 무한 스크롤 착시
  */
 
 import * as THREE from 'three';
@@ -12,20 +12,21 @@ import {
 } from '../utils/characterRenderer.js';
 import { store } from '../store/gameStore.js';
 
+// ── 타일 월드 상수 ─────────────────────────────────────────
+const TILE_SIZE   = 20;   // 타일 하나의 월드 크기
+const GRID_DIM    = 5;    // 5×5 그리드
+const HALF_G      = 2;    // (GRID_DIM-1)/2
+const WRAP_LIMIT  = TILE_SIZE * (HALF_G + 0.5);  // 이 거리 넘으면 반대쪽으로 랩
+const GRID_SPAN   = TILE_SIZE * GRID_DIM;         // 전체 그리드 크기 100
+
+const SEATS_PER_TABLE = 4;
 const TABLE_R         = 0.42;
 const SEAT_DIST       = 0.65;
-const SEATS_PER_TABLE = 4;
-const ROOM            = 7;     // 반방크기 → 방 14×14
-const WALL_H          = 3.4;   // 벽 높이
 
-// 따뜻한 앰버/허니 팔레트 — 레퍼런스 이미지 기준
+// ── 따뜻한 앰버/허니 팔레트 ────────────────────────────────
 const C = {
-  brick1:        0xD4906A,
-  brick2:        0xC07A52,
-  brick3:        0xCC8460,
   grout:         0x9A5C32,
   wall:          0xF5EBDB,
-  wallSide:      0xECDEC8,
   wallBase:      0xD8C8A4,
   counterTop:    0xCA9660,
   counterFront:  0xA06A2A,
@@ -35,7 +36,6 @@ const C = {
   chairWood:     0x7A4C22,
   chairPad:      0xD4AA72,
   windowGlass:   0xBED8F2,
-  windowFrame:   0x7A5428,
   lampCord:      0x2A1A08,
   lampBulb:      0xFFE898,
   lampSocket:    0x4A3020,
@@ -45,8 +45,12 @@ const C = {
   shelfWood:     0x9A6030,
   signDark:      0x1E0E04,
   coffeeMachine: 0x1A100A,
+  pole:          0x2A1808,
+  rug1:          0x8A4428,
+  rug2:          0xC06030,
 };
 
+// ── 재질 캐시 ──────────────────────────────────────────────
 const _matCache = new Map();
 function mat(color, opts = {}) {
   const key = `${color}_${JSON.stringify(opts)}`;
@@ -56,342 +60,286 @@ function mat(color, opts = {}) {
   return _matCache.get(key);
 }
 
+// ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋) ──────────
+const TILE_LAYOUTS = [
+  [{ x: -5.5, z: -5.5 }, { x: 4.5, z: 4.5 }],
+  [{ x: -4.5, z: 6.0 },  { x: 5.5, z: -4.0 }, { x: 0, z: -1.5 }],
+  [{ x: -7.0, z: -1.0 }, { x: 4.5, z: -6.0 }],
+  [{ x: 2.5,  z: 6.5 },  { x: -5.5, z: -2.5 }, { x: 6.5, z: 1.0 }],
+  [{ x: 5.5,  z: 5.5 },  { x: -4.0, z: 2.0 }],
+  [{ x: -6.5, z: -6.0 }, { x: 3.0, z: -3.5 }, { x: -2.0, z: 7.0 }],
+  [{ x: -3.0, z: -7.0 }, { x: 6.0, z: 3.0 }],
+  [{ x: 7.0,  z: -3.5 }, { x: -5.5, z: 5.5 }, { x: 1.5, z: 1.5 }],
+];
+
+// 타일별 램프 오프셋 (타일 중심 기준)
+const TILE_LAMPS = [
+  [[-4, -3], [4, 4]],
+  [[-6, 2],  [3, -5]],
+  [[-3, -6], [5, 3]],
+  [[4, -4],  [-5, 6]],
+  [[-5, -4], [4, 3]],
+  [[-3, 5],  [5, -4]],
+  [[1, -6],  [-6, 1]],
+  [[6, 2],   [-2, -5]],
+];
+
+// ── CafeScene 클래스 ───────────────────────────────────────
 export class CafeScene {
   constructor() {
-    this.scene = new THREE.Scene();
-    this.tables = new Map();
+    this.scene           = new THREE.Scene();
+    this.tables          = new Map();
     this.characterSprites = new Map();
-    this._tableCount = 0;
-    this._raycaster = new THREE.Raycaster();
-    this._staffCatGroup = null;
+    this._tableCount     = 0;
+    this._tiles          = [];
+    this._staffCatGroup  = null;
 
     this._setupLights();
-    this._buildInitialScene(8);
+    this._buildFloor();
+    this._buildIslandCounter();
+    this._buildTileGrid();
   }
 
-  _setupLights() {
-    this.scene.add(new THREE.AmbientLight(0xFFF4E0, 0.9));
+  get tableCount() { return this._tableCount; }
 
-    // 메인 디렉셔널 (카메라 방향에서)
-    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.1);
+  // ── 조명 ─────────────────────────────────────────────────
+  _setupLights() {
+    this.scene.add(new THREE.AmbientLight(0xFFF4E0, 1.0));
+
+    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.0);
     sun.position.set(9, 14, 9);
     this.scene.add(sun);
 
-    // 보조광 (반대쪽 약간)
     const fill = new THREE.DirectionalLight(0xF0DCC0, 0.3);
-    fill.position.set(-5, 6, -5);
+    fill.position.set(-5, 8, -5);
     this.scene.add(fill);
 
-    // 카운터 구역 포인트라이트
-    const cl = new THREE.PointLight(0xFFD080, 0.9, 8);
-    cl.position.set(5.5, 3.0, -2.5);
+    // 카운터 위 따뜻한 포인트 라이트
+    const cl = new THREE.PointLight(0xFFD080, 1.2, 12);
+    cl.position.set(0, 3.8, 0);
     this.scene.add(cl);
   }
 
-  _buildInitialScene(tableCount) {
-    this._buildFloor();
-    this._buildRoom();
-    this._buildCounter();
-    this._buildDecorations();
-    this._buildTables(tableCount);
-    this._tableCount = tableCount;
-  }
-
-  // ── 벽돌 바닥 ─────────────────────────────────────────────
+  // ── 무한 바닥 (대형 평면 + 시임리스 벽돌 텍스처) ───────────
   _buildFloor() {
-    const PX = 512;
-    const bwPx = 52;
-    const bhPx = 26;
-    const rows = Math.ceil(PX / bhPx) + 2;
-
+    const sz = 512, bw = 64, bh = 32;
     const canvas = document.createElement('canvas');
-    canvas.width = PX; canvas.height = PX;
+    canvas.width = sz; canvas.height = sz;
     const ctx = canvas.getContext('2d');
 
     ctx.fillStyle = '#9A5C32';
-    ctx.fillRect(0, 0, PX, PX);
+    ctx.fillRect(0, 0, sz, sz);
 
-    const brickColors = ['#D4906A', '#C87A52', '#CC8460', '#C07050', '#D09068'];
-
+    const brickColors = ['#D4906A', '#C87A52', '#CC8460', '#C07050', '#D09068', '#CA8A62'];
+    const rows = sz / bh;
     for (let row = 0; row < rows; row++) {
-      const offset = (row % 2) * (bwPx / 2);
-      const cols = Math.ceil(PX / bwPx) + 2;
-      for (let col = -1; col < cols; col++) {
-        const x = col * bwPx - offset;
-        const y = row * bhPx;
-        if (x + bwPx < 0 || x > PX) continue;
-        const ci = ((row * 3) + col * 2) % brickColors.length;
-        ctx.fillStyle = brickColors[Math.abs(ci)];
-        ctx.fillRect(x + 1.5, y + 1.5, bwPx - 3, bhPx - 3);
+      const off = (row % 2) * (bw / 2);
+      for (let col = -1; col <= sz / bw + 1; col++) {
+        const x = col * bw + off, y = row * bh;
+        if (x + bw <= 0 || x >= sz) continue;
+        const ci = Math.abs(row * 3 + col * 7 + row * col) % brickColors.length;
+        ctx.fillStyle = brickColors[ci];
+        ctx.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3);
       }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
-    const size = ROOM * 2;
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(size, size),
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    // 0.6 세계 유닛 = 벽돌 1개 너비 → 500 유닛 바닥에서 833개 반복
+    tex.repeat.set(120, 120);
+    tex.needsUpdate = true;
+
+    const floorMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1200, 1200),
       new THREE.MeshLambertMaterial({ map: tex })
     );
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.005;
-    mesh.name = 'floor';
-    this.scene.add(mesh);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = 0;
+    this.scene.add(floorMesh);
   }
 
-  // ── 방 구조 (3벽 + 천장 몰딩) ─────────────────────────────
-  _buildRoom() {
-    // 뒷벽 (z=-ROOM) — 카메라 기준 왼쪽 위에 보임
-    const backWall = new THREE.Mesh(
-      new THREE.BoxGeometry(ROOM * 2, WALL_H, 0.18),
-      mat(C.wall)
-    );
-    backWall.position.set(0, WALL_H / 2, -ROOM);
-    this.scene.add(backWall);
+  // ── 중앙 아일랜드 카운터 ─────────────────────────────────
+  _buildIslandCounter() {
+    const CW = 5.0, CD = 3.2, cH = 0.94, cT = 0.44;
+    const x1 = -CW / 2, x2 = CW / 2;
+    const z1 = -CD / 2, z2 = CD / 2;
 
-    // 오른쪽 벽 (x=+ROOM) — 카메라 기준 오른쪽 위 (카운터 쪽)
-    const rightWall = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, WALL_H, ROOM * 2),
-      mat(C.wallSide)
-    );
-    rightWall.position.set(ROOM, WALL_H / 2, 0);
-    this.scene.add(rightWall);
+    // 4면 패널 (속이 빈 직사각형)
+    const panels = [
+      { w: CW,           d: cT,           px: 0,          pz: z1 + cT / 2, color: C.counterFront },
+      { w: CW,           d: cT,           px: 0,          pz: z2 - cT / 2, color: C.counterFront },
+      { w: cT,           d: CD - cT * 2,  px: x1 + cT / 2, pz: 0,          color: C.counterSide  },
+      { w: cT,           d: CD - cT * 2,  px: x2 - cT / 2, pz: 0,          color: C.counterSide  },
+    ];
+    panels.forEach(({ w, d, px, pz, color }) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, cH, d), mat(color));
+      m.position.set(px, cH / 2, pz);
+      this.scene.add(m);
+    });
 
-    // 왼쪽 벽 (x=-ROOM) — 창문 있는 쪽
-    const leftWall = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, WALL_H, ROOM * 2),
-      mat(C.wallSide)
-    );
-    leftWall.position.set(-ROOM, WALL_H / 2, 0);
-    this.scene.add(leftWall);
+    // 상판 슬래브 (4면 + 내부 작업대)
+    const ovh = 0.07;
+    [
+      { w: CW + ovh,       d: cT + ovh,       px: 0,             pz: z1 + cT / 2 },
+      { w: CW + ovh,       d: cT + ovh,       px: 0,             pz: z2 - cT / 2 },
+      { w: cT + ovh,       d: CD - cT * 2 + ovh, px: x1 + cT / 2, pz: 0           },
+      { w: cT + ovh,       d: CD - cT * 2 + ovh, px: x2 - cT / 2, pz: 0           },
+      { w: CW - cT * 2 - 0.08, d: CD - cT * 2 - 0.08, px: 0, pz: 0 },  // 내부 작업대
+    ].forEach(({ w, d, px, pz }) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, d), mat(C.counterTop));
+      m.position.set(px, cH + 0.045, pz);
+      this.scene.add(m);
+    });
 
-    // 걸레받이
-    const backBase = new THREE.Mesh(new THREE.BoxGeometry(ROOM*2, 0.16, 0.24), mat(C.wallBase));
-    backBase.position.set(0, 0.08, -ROOM + 0.06);
-    this.scene.add(backBase);
+    // 카운터 위 장비
+    this._buildCoffeeMachine(-0.9, cH, -0.2);
+    this._buildCoffeeMachine(0.5,  cH, -0.25);
+    this._addCupStack(1.5, cH, 0.3);
+    this._addCounterPlant(-1.6, cH, 0.5);
 
-    const rightBase = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, ROOM*2), mat(C.wallBase));
-    rightBase.position.set(ROOM - 0.06, 0.08, 0);
-    this.scene.add(rightBase);
+    // 메뉴 보드 폴 + 패널 (카운터 뒤 -z 방향)
+    const poleH = 2.5;
+    [[-1.5, z1 - 0.1], [1.5, z1 - 0.1]].forEach(([px, pz]) => {
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, poleH, 6),
+        mat(C.pole)
+      );
+      pole.position.set(px, cH + poleH / 2, pz);
+      this.scene.add(pole);
+    });
 
-    // 천장 몰딩
-    const backCeil = new THREE.Mesh(new THREE.BoxGeometry(ROOM*2, 0.14, 0.24), mat(C.wallBase));
-    backCeil.position.set(0, WALL_H - 0.07, -ROOM + 0.06);
-    this.scene.add(backCeil);
+    // 수평 크로스바
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.06, 0.06), mat(C.pole));
+    bar.position.set(0, cH + poleH - 0.1, z1 - 0.1);
+    this.scene.add(bar);
 
-    const rightCeil = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, ROOM*2), mat(C.wallBase));
-    rightCeil.position.set(ROOM - 0.06, WALL_H - 0.07, 0);
-    this.scene.add(rightCeil);
+    // 메뉴 보드 2장 (폴에 걸림)
+    this._addMenuPanel(-0.9, cH + poleH - 0.6, z1 - 0.16, 'BREAKFAST · LUNCH');
+    this._addMenuPanel( 0.9, cH + poleH - 0.6, z1 - 0.16, 'COFFEE · DESSERT');
 
-    this._addCoffeeSign();
-    this._addWindows();
-    this._addMenuBoard();
+    // COFFEE 사인보드 (카운터 정면 상단)
+    this._addCoffeeSign(0, cH + poleH + 0.1, z2 + 0.08);
+
+    // 선반 (카운터 뒤 -z 벽쪽)
+    this._addWallShelf(0, 2.2, z1 - 0.6);
+
+    // 바 스툴 — 정면(z2), 좌측(x1), 우측(x2) 3면
+    const stoolZ = z2 + 0.72;
+    for (let i = 0; i < 5; i++) {
+      this._addBarStool(x1 + CW * (i + 0.5) / 5, stoolZ);
+    }
+    [-0.6, 0.6].forEach(dz => this._addBarStool(x1 - 0.72, dz));
+    [-0.6, 0.6].forEach(dz => this._addBarStool(x2 + 0.72, dz));
+
+    // 직원 고양이 카운터 안
+    this._addStaffCat(0.2, cH, -0.1);
   }
 
-  _addCoffeeSign() {
-    // 뒷벽 상단 "COFFEE" 사인
-    const canvas = document.createElement('canvas');
-    canvas.width = 256; canvas.height = 72;
-    const ctx = canvas.getContext('2d');
-
+  _addCoffeeSign(x, y, z) {
+    const cv = document.createElement('canvas');
+    cv.width = 320; cv.height = 80;
+    const ctx = cv.getContext('2d');
     ctx.fillStyle = '#1A0A02';
-    ctx.fillRect(0, 0, 256, 72);
-
-    ctx.font = 'bold 44px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillRect(0, 0, 320, 80);
+    ctx.font = 'bold 48px Georgia, serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFE090';
-    ctx.shadowColor = '#FFB030';
-    ctx.shadowBlur = 10;
-    ctx.fillText('COFFEE', 128, 36);
+    ctx.shadowColor = '#FFA020'; ctx.shadowBlur = 12;
+    ctx.fillText('☕ COFFEE', 160, 42);
+    const tex = new THREE.CanvasTexture(cv);
 
-    const tex = new THREE.CanvasTexture(canvas);
-    // 테두리 프레임
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(2.7, 0.78, 0.07),
-      mat(C.shelfWood)
-    );
-    frame.position.set(-1.0, WALL_H - 0.65, -ROOM + 0.14);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.85, 0.08), mat(C.shelfWood));
+    frame.position.set(x, y, z);
     this.scene.add(frame);
-
     const sign = new THREE.Mesh(
-      new THREE.BoxGeometry(2.5, 0.62, 0.08),
+      new THREE.BoxGeometry(3.0, 0.70, 0.10),
       new THREE.MeshLambertMaterial({ map: tex })
     );
-    sign.position.set(-1.0, WALL_H - 0.65, -ROOM + 0.15);
+    sign.position.set(x, y, z + 0.02);
     this.scene.add(sign);
   }
 
-  _addWindows() {
-    // 왼쪽 벽 창문 3개
-    const glassMat = new THREE.MeshLambertMaterial({
-      color: C.windowGlass, transparent: true, opacity: 0.72,
-    });
-
-    // 가을 야외 배경 텍스처
-    const outdoorCanvas = document.createElement('canvas');
-    outdoorCanvas.width = 128; outdoorCanvas.height = 160;
-    const ctx = outdoorCanvas.getContext('2d');
-    const sky = ctx.createLinearGradient(0, 0, 0, 80);
-    sky.addColorStop(0, '#8BBFE8');
-    sky.addColorStop(1, '#D4B870');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, 128, 80);
-    ctx.fillStyle = '#C0A050';
-    ctx.fillRect(0, 80, 128, 80);
-    // 나무
-    ctx.fillStyle = '#7A4A1A';
-    ctx.fillRect(48, 70, 12, 90);
-    ctx.fillStyle = '#D07020';
-    ctx.beginPath(); ctx.arc(54, 55, 30, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#B85C10';
-    ctx.beginPath(); ctx.arc(38, 68, 20, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#E08828';
-    ctx.beginPath(); ctx.arc(70, 65, 18, 0, Math.PI * 2); ctx.fill();
-    const outdoorTex = new THREE.CanvasTexture(outdoorCanvas);
-
-    [-3.8, 0, 3.8].forEach(z => {
-      // 야외 장면
-      const outdoor = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, 2.1, 1.85),
-        new THREE.MeshLambertMaterial({ map: outdoorTex })
-      );
-      outdoor.position.set(-ROOM - 0.04, 1.6, z);
-      this.scene.add(outdoor);
-
-      // 창틀
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(0.22, 2.3, 2.05),
-        mat(C.windowFrame)
-      );
-      frame.position.set(-ROOM, 1.6, z);
-      this.scene.add(frame);
-
-      // 유리
-      const glass = new THREE.Mesh(
-        new THREE.BoxGeometry(0.18, 2.0, 1.75), glassMat
-      );
-      glass.position.set(-ROOM, 1.6, z);
-      this.scene.add(glass);
-
-      // 수평 중간 바
-      const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 2.05), mat(C.windowFrame));
-      hBar.position.set(-ROOM, 1.6, z);
-      this.scene.add(hBar);
-      // 수직 중간 바
-      const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.3, 0.07), mat(C.windowFrame));
-      vBar.position.set(-ROOM, 1.6, z);
-      this.scene.add(vBar);
-    });
-  }
-
-  _addMenuBoard() {
-    // 뒷벽 오른쪽에 메뉴 칠판
-    const boardCanvas = document.createElement('canvas');
-    boardCanvas.width = 128; boardCanvas.height = 96;
-    const ctx = boardCanvas.getContext('2d');
-    ctx.fillStyle = '#0E080A';
-    ctx.fillRect(0, 0, 128, 96);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  _addMenuPanel(x, y, z, title) {
+    const cv = document.createElement('canvas');
+    cv.width = 192; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#0C0608';
+    ctx.fillRect(0, 0, 192, 128);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('MENU', 64, 18);
+    ctx.fillText(title, 96, 20);
     ctx.font = '10px sans-serif';
-    ctx.fillStyle = 'rgba(220,200,160,0.9)';
-    ['Espresso  ₩4,000', 'Latte  ₩5,000', 'Cappuccino  ₩5,500', '오늘의 케이크 ₩6,000'].forEach((t, i) => {
-      ctx.fillText(t, 64, 36 + i * 15);
-    });
-    const boardTex = new THREE.CanvasTexture(boardCanvas);
+    ctx.fillStyle = 'rgba(210,190,145,0.9)';
+    const items = ['Espresso   ₩4,000', 'Americano  ₩4,500', 'Latte      ₩5,000',
+                   'Cappuccino ₩5,500', 'Cold Brew  ₩5,000', 'Cake       ₩6,000'];
+    items.forEach((t, i) => ctx.fillText(t, 96, 38 + i * 14));
+    const tex = new THREE.CanvasTexture(cv);
 
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.45, 0.07), mat(C.shelfWood));
-    frame.position.set(4.0, 2.15, -ROOM + 0.14);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.55, 1.05, 0.06), mat(C.shelfWood));
+    frame.position.set(x, y, z);
     this.scene.add(frame);
-
     const board = new THREE.Mesh(
-      new THREE.BoxGeometry(1.7, 1.28, 0.09),
-      new THREE.MeshLambertMaterial({ map: boardTex })
+      new THREE.BoxGeometry(1.38, 0.90, 0.08),
+      new THREE.MeshLambertMaterial({ map: tex })
     );
-    board.position.set(4.0, 2.15, -ROOM + 0.16);
+    board.position.set(x, y, z + 0.02);
     this.scene.add(board);
   }
 
-  // ── 카운터 (오른쪽 벽을 따라) ─────────────────────────────
-  _buildCounter() {
-    const cZ1 = -5.8, cZ2 = 1.2;   // z 범위
-    const cLen = cZ2 - cZ1;
-    const cX1 = 4.6, cX2 = 6.8;    // x 범위 (오른쪽 벽쪽)
-    const cH  = 0.94;
-    const cD  = cX2 - cX1;
+  _addWallShelf(x, y, z) {
+    // 벽 선반 + 진열 아이템
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 0.4), mat(C.shelfWood));
+    shelf.position.set(x, y, z);
+    this.scene.add(shelf);
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.38), mat(C.shelfWood));
+    [-1.5, 0, 1.5].forEach(dx => {
+      const b = bracket.clone();
+      b.position.set(x + dx, y - 0.15, z);
+      this.scene.add(b);
+    });
+    [0xD04040, 0x4060D0, 0x48A868, 0xE8A040, 0xC04080, 0x90C0D0].forEach((col, i) => {
+      const item = new THREE.Mesh(
+        new THREE.BoxGeometry(0.10 + (i % 2) * 0.05, 0.14 + (i % 3) * 0.07, 0.09),
+        mat(col)
+      );
+      item.position.set(x + (i - 2.5) * 0.58, y + 0.12 + (i % 2) * 0.04, z + (i % 2) * 0.06);
+      this.scene.add(item);
+    });
+  }
 
-    // 카운터 몸체
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(cD, cH, cLen),
-      mat(C.counterFront)
+  _addBarStool(x, z) {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.024, 0.030, 0.64, 6), mat(C.chairWood)
     );
-    body.position.set((cX1 + cX2) / 2, cH / 2, (cZ1 + cZ2) / 2);
-    this.scene.add(body);
-
-    // 카운터 상판 (약간 오버행)
-    const top = new THREE.Mesh(
-      new THREE.BoxGeometry(cD + 0.16, 0.09, cLen + 0.1),
-      mat(C.counterTop)
+    pole.position.set(x, 0.32, z);
+    this.scene.add(pole);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.14, 0.02, 5, 14), mat(C.chairWood)
     );
-    top.position.set((cX1 + cX2) / 2 - 0.05, cH + 0.045, (cZ1 + cZ2) / 2);
-    this.scene.add(top);
-
-    // 앞면 "COFFEE!" 텍스처
-    const cfCanvas = document.createElement('canvas');
-    cfCanvas.width = 512; cfCanvas.height = 64;
-    const cfCtx = cfCanvas.getContext('2d');
-    cfCtx.fillStyle = '#A06A2A';
-    cfCtx.fillRect(0, 0, 512, 64);
-    cfCtx.font = 'bold 36px Georgia, serif';
-    cfCtx.fillStyle = '#F0D080';
-    cfCtx.textAlign = 'center';
-    cfCtx.textBaseline = 'middle';
-    cfCtx.fillText('COFFEE !', 256, 34);
-    const cfTex = new THREE.CanvasTexture(cfCanvas);
-
-    const frontFace = new THREE.Mesh(
-      new THREE.BoxGeometry(0.07, cH - 0.1, cLen),
-      new THREE.MeshLambertMaterial({ map: cfTex })
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(x, 0.26, z);
+    this.scene.add(ring);
+    const seat = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.19, 0.17, 0.06, 14), mat(C.chairPad)
     );
-    frontFace.position.set(cX1 + 0.03, cH / 2, (cZ1 + cZ2) / 2);
-    this.scene.add(frontFace);
-
-    // 내부 물건들
-    this._buildCoffeeMachine(cX1 + cD * 0.6, cH, cZ1 + 1.4);
-    this._addCupStack(cX1 + 0.6, cH + 0.09, cZ1 + 3.2);
-    this._addCounterPlant(cX1 + 0.5, cH + 0.09, cZ1 + 4.8);
-
-    // 전시 선반 (카운터 끝쪽)
-    this._buildDisplayShelf(cX1, cX2, cZ2);
-
-    // 바 스툴
-    this._addBarStools(cX1, cZ1, cLen);
-
-    // 직원 고양이
-    this._addStaffCat((cX1 + cX2) / 2 + 0.3, cH, cZ1 + 1.8);
+    seat.position.set(x, 0.67, z);
+    this.scene.add(seat);
   }
 
   _buildCoffeeMachine(x, baseY, z) {
     const body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.54, 0.44, 0.38), mat(C.coffeeMachine)
+      new THREE.BoxGeometry(0.52, 0.44, 0.36), mat(C.coffeeMachine)
     );
     body.position.set(x, baseY + 0.22, z);
     this.scene.add(body);
-
-    // 스팀 완드
     const wand = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.32, 6), mat(0x909090)
+      new THREE.CylinderGeometry(0.018, 0.018, 0.30, 6), mat(0x909090)
     );
-    wand.position.set(x + 0.32, baseY + 0.3, z);
+    wand.position.set(x + 0.30, baseY + 0.30, z);
     wand.rotation.z = 0.4;
     this.scene.add(wand);
-
-    // 트레이
-    const tray = new THREE.Mesh(
-      new THREE.BoxGeometry(0.38, 0.02, 0.3), mat(0x808080)
-    );
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.02, 0.28), mat(0x808080));
     tray.position.set(x, baseY + 0.01, z);
     this.scene.add(tray);
   }
@@ -399,7 +347,7 @@ export class CafeScene {
   _addCupStack(x, baseY, z) {
     [0xF0E0D0, 0xEAD8C8, 0xF2E4D4].forEach((col, i) => {
       const cup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.065, 0.055, 0.1, 8), mat(col)
+        new THREE.CylinderGeometry(0.065, 0.055, 0.10, 8), mat(col)
       );
       cup.position.set(x, baseY + 0.05 + i * 0.09, z);
       this.scene.add(cup);
@@ -408,95 +356,32 @@ export class CafeScene {
 
   _addCounterPlant(x, baseY, z) {
     const pot = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.1, 0.08, 0.14, 8), mat(C.pot)
+      new THREE.CylinderGeometry(0.10, 0.08, 0.14, 8), mat(C.pot)
     );
     pot.position.set(x, baseY + 0.07, z);
     this.scene.add(pot);
-
-    [0, 1, 2, 3].forEach(i => {
-      const ang = (i / 4) * Math.PI * 2;
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2;
       const leaf = new THREE.Mesh(
-        new THREE.SphereGeometry(0.07, 5, 4), mat(i % 2 ? C.leaf1 : C.leaf2)
+        new THREE.SphereGeometry(0.07, 5, 4),
+        mat(i % 2 ? C.leaf1 : C.leaf2)
       );
       leaf.position.set(x + Math.cos(ang) * 0.08, baseY + 0.22, z + Math.sin(ang) * 0.08);
       this.scene.add(leaf);
-    });
-  }
-
-  _buildDisplayShelf(cX1, cX2, cZ2) {
-    const sH = 1.6, sD = cX2 - cX1, sW = 1.3;
-    const shelfX = (cX1 + cX2) / 2;
-
-    const shelf = new THREE.Mesh(
-      new THREE.BoxGeometry(sD + 0.14, sH, sW),
-      mat(C.shelfWood)
-    );
-    shelf.position.set(shelfX, sH / 2, cZ2 + sW / 2 + 0.05);
-    this.scene.add(shelf);
-
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(0.07, sH - 0.18, sW - 0.12),
-      new THREE.MeshLambertMaterial({ color: C.windowGlass, transparent: true, opacity: 0.6 })
-    );
-    glass.position.set(cX1 - 0.04, sH / 2, cZ2 + sW / 2 + 0.05);
-    this.scene.add(glass);
-
-    // 선반 위 소품
-    [0xD04040, 0x4060D0, 0x48A868, 0xE8A040, 0xC04080].forEach((col, i) => {
-      const item = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1 + (i%2)*0.05, 0.14 + (i%3)*0.07, 0.09),
-        mat(col)
-      );
-      item.position.set(
-        cX1 + 0.3 + (i % 3) * 0.42,
-        0.25 + Math.floor(i / 3) * 0.58,
-        cZ2 + 0.18 + (i % 2) * 0.55
-      );
-      this.scene.add(item);
-    });
-  }
-
-  _addBarStools(counterX, counterZ1, counterLen) {
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const z = counterZ1 + 0.9 + (i / (n - 1)) * (counterLen - 1.8);
-      const x = counterX - 0.58;
-
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.024, 0.03, 0.64, 6), mat(C.chairWood)
-      );
-      pole.position.set(x, 0.32, z);
-      this.scene.add(pole);
-
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.14, 0.02, 5, 14), mat(C.chairWood)
-      );
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(x, 0.26, z);
-      this.scene.add(ring);
-
-      const seat = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.19, 0.17, 0.06, 14), mat(C.chairPad)
-      );
-      seat.position.set(x, 0.67, z);
-      this.scene.add(seat);
     }
   }
 
   _addStaffCat(x, _baseY, z) {
     const group = new THREE.Group();
-    group.name = 'staff-cat';
-
     const sprite = createCharacterSprite(
-      { bodyColor: '#F0E8D8', accessories: ['apron'] },
-      '바리스타'
+      { bodyColor: '#F0E8D8', accessories: ['apron'] }, '바리스타'
     );
     sprite.scale.set(0.65, 0.85, 1);
     sprite.position.y = 0.46;
     group.add(sprite);
 
     const nameTag = createNameTag('바리스타', false);
-    nameTag.position.y = 1.08;
+    nameTag.position.y = 1.10;
     group.add(nameTag);
 
     group.position.set(x, 0, z);
@@ -504,74 +389,129 @@ export class CafeScene {
     this._staffCatGroup = group;
   }
 
-  // ── 에디슨 전구 + 장식 ─────────────────────────────────────
-  _buildDecorations() {
-    // 에디슨 전구 펜던트 (6개)
-    [
-      [-3.5, -4.0, 0.72],
-      [ 0.0, -4.5, 0.65],
-      [ 3.0, -2.5, 0.78],
-      [-2.5,  0.5, 0.68],
-      [ 0.5,  2.0, 0.74],
-      [-1.5,  5.0, 0.70],
-    ].forEach(([x, z, cordLen]) => this._addEdisonLamp(x, z, cordLen));
-
-    // 바닥 화분
-    this._addFloorPlant(-6.0, -5.8);
-    this._addFloorPlant(-5.5,  4.5);
-    this._addTallPlant(-6.0,  5.5);
-
-    // A프레임 SALE 사인
-    this._addAFrameSign(3.2, 0.8);
+  // ── 타일 그리드 생성 ──────────────────────────────────────
+  _buildTileGrid() {
+    let tableIdx = 0;
+    for (let tx = -HALF_G; tx <= HALF_G; tx++) {
+      for (let tz = -HALF_G; tz <= HALF_G; tz++) {
+        const isCenter = (tx === 0 && tz === 0);
+        const addLight  = (Math.abs(tx) <= 1 && Math.abs(tz) <= 1);
+        const tileData  = this._createTile(tx, tz, tableIdx, isCenter, addLight);
+        this._tiles.push(tileData);
+        tableIdx += tileData.tableIds.length;
+      }
+    }
+    this._tableCount = tableIdx;
   }
 
-  _addEdisonLamp(x, z, cordLen = 0.7) {
-    const ceilY = WALL_H;
+  _createTile(tx, tz, startIdx, isCenter, addLight) {
+    const wx = tx * TILE_SIZE;
+    const wz = tz * TILE_SIZE;
+
+    // 타일 장식 그룹 (램프, 화분 — 랩핑 시 같이 이동)
+    const group = new THREE.Group();
+    group.position.set(wx, 0, wz);
+    this.scene.add(group);
+
+    const seed = Math.abs(tx * 17 + tz * 31 + Math.abs(tx * tz) * 7) % 1000;
+    const tableIds = [];
+
+    if (isCenter) {
+      // 중앙 타일: 카운터 주변 테이블 4개
+      const periphery = [
+        { x: -7.5, z: -7.5 }, { x: 0, z: -8.0 },
+        { x: -8.0, z: 6.5 },  { x: 6.5, z: -6.5 },
+      ];
+      periphery.forEach((pos, i) => {
+        const id = `table_${startIdx + i}`;
+        this._createTable(id, wx + pos.x, wz + pos.z, SEATS_PER_TABLE);
+        tableIds.push(id);
+      });
+    } else {
+      const layoutIdx = seed % TILE_LAYOUTS.length;
+      TILE_LAYOUTS[layoutIdx].forEach((pos, i) => {
+        const id = `table_${startIdx + i}`;
+        this._createTable(id, wx + pos.x, wz + pos.z, SEATS_PER_TABLE);
+        tableIds.push(id);
+      });
+    }
+
+    // 에디슨 램프 (타일 그룹 자식으로 추가 → 랩핑 시 같이 이동)
+    const lampIdx = seed % TILE_LAMPS.length;
+    TILE_LAMPS[lampIdx].forEach(([lx, lz]) => {
+      const cordLen = 0.55 + (seed % 5) * 0.06;
+      this._addEdisonLampToGroup(group, lx, lz, cordLen, addLight);
+    });
+
+    // 화분 (간헐적)
+    if (seed % 4 === 0) {
+      const px = ((seed % 5) - 2) * 2.5;
+      const pz = ((seed % 7) - 3) * 2.0;
+      this._addFloorPlantToGroup(group, px, pz);
+    } else if (seed % 6 === 2) {
+      const px = ((seed % 4) - 1.5) * 2.8;
+      const pz = ((seed % 5) - 2) * 2.4;
+      this._addTallPlantToGroup(group, px, pz);
+    }
+
+    // 가끔 러그 (장식용 바닥 매트)
+    if (seed % 5 === 0 && !isCenter) {
+      const rug = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 0.02, 1.6),
+        mat(seed % 2 ? C.rug1 : C.rug2)
+      );
+      rug.position.set(TILE_LAYOUTS[layoutIdx][0].x, 0.008, TILE_LAYOUTS[layoutIdx][0].z);
+      group.add(rug);
+    }
+
+    return { group, wx, wz, tableIds };
+  }
+
+  // ── 에디슨 램프 (그룹 로컬 좌표) ─────────────────────────
+  _addEdisonLampToGroup(group, localX, localZ, cordLen, addPointLight) {
+    const ceilY = 3.4;
 
     const cord = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.008, 0.008, cordLen, 4),
-      mat(C.lampCord)
+      new THREE.CylinderGeometry(0.008, 0.008, cordLen, 4), mat(C.lampCord)
     );
-    cord.position.set(x, ceilY - cordLen / 2, z);
-    this.scene.add(cord);
+    cord.position.set(localX, ceilY - cordLen / 2, localZ);
+    group.add(cord);
 
     const socket = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.036, 0.030, 0.065, 8),
-      mat(C.lampSocket)
+      new THREE.CylinderGeometry(0.036, 0.030, 0.065, 8), mat(C.lampSocket)
     );
-    socket.position.set(x, ceilY - cordLen - 0.032, z);
-    this.scene.add(socket);
+    socket.position.set(localX, ceilY - cordLen - 0.032, localZ);
+    group.add(socket);
 
-    // 전구 (구체 + 목 부분)
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.082, 8, 8),
       new THREE.MeshLambertMaterial({
-        color: C.lampBulb,
-        emissive: 0xFFD040,
-        emissiveIntensity: 0.55,
+        color: C.lampBulb, emissive: 0xFFD040, emissiveIntensity: 0.6,
       })
     );
-    bulb.position.set(x, ceilY - cordLen - 0.12, z);
-    this.scene.add(bulb);
+    bulb.position.set(localX, ceilY - cordLen - 0.12, localZ);
+    group.add(bulb);
 
     const neck = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.038, 0.065, 6),
-      mat(C.lampBulb)
+      new THREE.CylinderGeometry(0.018, 0.038, 0.065, 6), mat(C.lampBulb)
     );
-    neck.position.set(x, ceilY - cordLen - 0.185, z);
-    this.scene.add(neck);
+    neck.position.set(localX, ceilY - cordLen - 0.185, localZ);
+    group.add(neck);
 
-    const light = new THREE.PointLight(0xFFD870, 0.5, 4.8);
-    light.position.set(x, ceilY - cordLen - 0.14, z);
-    this.scene.add(light);
+    if (addPointLight) {
+      const light = new THREE.PointLight(0xFFD870, 0.55, 5.5);
+      light.position.set(localX, ceilY - cordLen - 0.14, localZ);
+      group.add(light);
+    }
   }
 
-  _addFloorPlant(x, z) {
+  // ── 화분 (그룹 로컬 좌표) ─────────────────────────────────
+  _addFloorPlantToGroup(group, localX, localZ) {
     const pot = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22, 0.17, 0.38, 10), mat(C.pot)
     );
-    pot.position.set(x, 0.19, z);
-    this.scene.add(pot);
+    pot.position.set(localX, 0.19, localZ);
+    group.add(pot);
 
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
@@ -580,102 +520,89 @@ export class CafeScene {
         new THREE.SphereGeometry(0.13 + (i % 2) * 0.05, 6, 5),
         mat(i % 2 ? C.leaf1 : C.leaf2)
       );
-      leaf.position.set(x + Math.cos(ang) * r, 0.66 + (i % 3) * 0.13, z + Math.sin(ang) * r);
-      this.scene.add(leaf);
+      leaf.position.set(localX + Math.cos(ang) * r, 0.66 + (i % 3) * 0.13, localZ + Math.sin(ang) * r);
+      group.add(leaf);
     }
   }
 
-  _addTallPlant(x, z) {
+  _addTallPlantToGroup(group, localX, localZ) {
     const pot = new THREE.Mesh(
       new THREE.CylinderGeometry(0.28, 0.22, 0.46, 10), mat(C.pot)
     );
-    pot.position.set(x, 0.23, z);
-    this.scene.add(pot);
+    pot.position.set(localX, 0.23, localZ);
+    group.add(pot);
 
     const stem = new THREE.Mesh(
       new THREE.CylinderGeometry(0.04, 0.06, 1.2, 6), mat(C.leaf2)
     );
-    stem.position.set(x, 0.86, z);
-    this.scene.add(stem);
+    stem.position.set(localX, 0.86, localZ);
+    group.add(stem);
 
     [[0, 0], [0.22, 0.08], [-0.22, 0.08], [0, 0.22]].forEach(([lx, lz]) => {
       const leaf = new THREE.Mesh(
         new THREE.SphereGeometry(0.20, 6, 5), mat(C.leaf1)
       );
-      leaf.position.set(x + lx, 1.6, z + lz);
-      this.scene.add(leaf);
+      leaf.position.set(localX + lx, 1.60, localZ + lz);
+      group.add(leaf);
     });
   }
 
-  _addAFrameSign(x, z) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64; canvas.height = 80;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#100808';
-    ctx.fillRect(0, 0, 64, 80);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('SALE', 32, 30);
-    ctx.font = '10px sans-serif';
-    ctx.fillStyle = '#C0B090';
-    ctx.fillText('today!', 32, 50);
-    const tex = new THREE.CanvasTexture(canvas);
+  // ── 무한 타일 랩핑 ─────────────────────────────────────────
+  /**
+   * 카메라 타겟 주변으로 타일을 랩핑해서 무한 맵 착시 생성.
+   * worldRenderer의 animate 루프에서 매 프레임 호출.
+   */
+  updateTiles(cameraTarget) {
+    this._tiles.forEach(tile => {
+      const dx = tile.wx - cameraTarget.x;
+      const dz = tile.wz - cameraTarget.z;
+      let shiftX = 0, shiftZ = 0;
 
-    const signH = 0.72, signW = 0.52;
-    [-0.12, 0.12].forEach((dx, idx) => {
-      const panel = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, signH, signW),
-        idx === 0 ? new THREE.MeshLambertMaterial({ map: tex }) : mat(C.signDark)
-      );
-      panel.position.set(x + dx, signH / 2, z);
-      panel.rotation.y = dx > 0 ? -0.2 : 0.2;
-      this.scene.add(panel);
+      if (dx >  WRAP_LIMIT) shiftX = -GRID_SPAN;
+      if (dx < -WRAP_LIMIT) shiftX =  GRID_SPAN;
+      if (dz >  WRAP_LIMIT) shiftZ = -GRID_SPAN;
+      if (dz < -WRAP_LIMIT) shiftZ =  GRID_SPAN;
+
+      if (shiftX || shiftZ) {
+        tile.wx += shiftX;
+        tile.wz += shiftZ;
+        tile.group.position.x += shiftX;
+        tile.group.position.z += shiftZ;
+
+        // 테이블 그룹 및 맵 내 위치 데이터 동기화
+        tile.tableIds.forEach(id => {
+          const td = this.tables.get(id);
+          if (!td) return;
+          td.position.x += shiftX;
+          td.position.z += shiftZ;
+          td.group.position.x += shiftX;
+          td.group.position.z += shiftZ;
+          td.seats.forEach(s => {
+            s.worldX += shiftX;
+            s.worldZ += shiftZ;
+          });
+        });
+      }
     });
   }
 
-  // ── 테이블 배치 ──────────────────────────────────────────
-  _buildTables(count) {
-    const positions = this._generateTablePositions(count);
-    positions.forEach((pos, i) => {
-      this._createTable(`table_${i}`, pos.x, pos.z, SEATS_PER_TABLE);
-    });
-  }
-
-  _generateTablePositions(count) {
-    const positions = [
-      { x: -3.5, z: -3.2 },
-      { x: -0.4, z: -4.6 },
-      { x: -4.6, z:  0.8 },
-      { x: -1.4, z:  0.4 },
-      { x: -4.2, z:  4.6 },
-      { x: -1.2, z:  4.0 },
-      { x:  1.6, z:  3.4 },
-      { x: -2.6, z: -1.8 },
-    ];
-    return positions.slice(0, count);
-  }
-
+  // ── 테이블 생성 ──────────────────────────────────────────
   _createTable(tableId, x, z, seatCount = SEATS_PER_TABLE) {
     const group = new THREE.Group();
     group.name = tableId;
-    group.position.set(x, 0, z);
 
-    // 중심 폴
     const leg = new THREE.Mesh(
       new THREE.CylinderGeometry(0.04, 0.06, 0.72, 8), mat(C.tableLeg)
     );
     leg.position.y = 0.36;
     group.add(leg);
 
-    // 받침 디스크
     const base = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12), mat(C.tableLeg)
     );
     base.position.y = 0.02;
     group.add(base);
 
-    // 상판
     const top = new THREE.Mesh(
       new THREE.CylinderGeometry(TABLE_R, TABLE_R, 0.06, 24),
       mat(C.tableTop)
@@ -684,7 +611,6 @@ export class CafeScene {
     top.userData.tableId = tableId;
     group.add(top);
 
-    // 테두리 링
     const rim = new THREE.Mesh(
       new THREE.TorusGeometry(TABLE_R, 0.022, 6, 24), mat(C.tableLeg)
     );
@@ -692,16 +618,14 @@ export class CafeScene {
     rim.rotation.x = Math.PI / 2;
     group.add(rim);
 
-    // 테이블 위 컵 (확률적으로)
-    if ((x + z * 1.3) % 2.2 > 1.0) {
+    if (((x * 1.7 + z * 1.3) % 2.2 + 2.2) % 2.2 > 1.0) {
       const cup = new THREE.Mesh(
         new THREE.CylinderGeometry(0.048, 0.04, 0.09, 8), mat(0xE8D4B8)
       );
-      cup.position.set(0.1, 0.79, 0.08);
+      cup.position.set(0.10, 0.79, 0.08);
       group.add(cup);
     }
 
-    // 의자
     const seats = [];
     for (let i = 0; i < seatCount; i++) {
       const angle = (i / seatCount) * Math.PI * 2 + Math.PI / 4;
@@ -714,6 +638,7 @@ export class CafeScene {
       });
     }
 
+    group.position.set(x, 0, z);
     this.scene.add(group);
     this.tables.set(tableId, { group, seats, position: { x, z }, seatCount });
     return { group, seats };
@@ -724,27 +649,23 @@ export class CafeScene {
     group.position.set(Math.cos(angle) * SEAT_DIST, 0, Math.sin(angle) * SEAT_DIST);
     group.rotation.y = angle + Math.PI;
 
-    // 방석
     const seat = new THREE.Mesh(
       new THREE.CylinderGeometry(0.18, 0.16, 0.05, 12), mat(C.chairPad)
     );
     seat.position.y = 0.44;
     group.add(seat);
 
-    // 등받이 (두 기둥 + 상단 바)
     const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.4, 6), mat(C.chairWood));
-    bL.position.set(-0.1, 0.67, -0.14);
-    group.add(bL);
+    bL.position.set(-0.1, 0.67, -0.14); group.add(bL);
     const bR = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.4, 6), mat(C.chairWood));
-    bR.position.set(0.1, 0.67, -0.14);
-    group.add(bR);
+    bR.position.set(0.1, 0.67, -0.14); group.add(bR);
     const bTop = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.04), mat(C.chairWood));
-    bTop.position.set(0, 0.88, -0.14);
-    group.add(bTop);
+    bTop.position.set(0, 0.88, -0.14); group.add(bTop);
 
-    // 4 다리
     [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]].forEach(([lx, lz]) => {
-      const l = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.42, 6), mat(C.chairWood));
+      const l = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015, 0.015, 0.42, 6), mat(C.chairWood)
+      );
       l.position.set(lx, 0.21, lz);
       group.add(l);
     });
@@ -755,12 +676,12 @@ export class CafeScene {
   // ── 캐릭터 관리 ──────────────────────────────────────────
   updateCharacter(userInfo) {
     const { id, username, avatar, tableId, seatIndex, isMe, heldCoffee } = userInfo;
-    const pos = this._resolvePosition(tableId, seatIndex, id);
+    const pos     = this._resolvePosition(tableId, seatIndex, id);
     const existing = this.characterSprites.get(id);
 
     if (existing) {
       const p = existing.group.position;
-      const avatarKey = avatar ? `${avatar.bodyColor}_${(avatar.accessories||[]).sort().join(',')}` : '';
+      const avatarKey = avatar ? `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}` : '';
       if (
         Math.abs(p.x - pos.x) < 0.001 &&
         Math.abs(p.z - pos.z) < 0.001 &&
@@ -771,7 +692,7 @@ export class CafeScene {
 
     if (!avatar) return;
 
-    const group = new THREE.Group();
+    const group  = new THREE.Group();
     const sprite = createCharacterSprite(avatar, username);
     sprite.position.y = 0.45;
     group.add(sprite);
@@ -789,7 +710,9 @@ export class CafeScene {
     if (isMe) {
       const glow = new THREE.Mesh(
         new THREE.CircleGeometry(0.32, 16),
-        new THREE.MeshBasicMaterial({ color: 0xFFD080, transparent: true, opacity: 0.22, depthWrite: false })
+        new THREE.MeshBasicMaterial({
+          color: 0xFFD080, transparent: true, opacity: 0.22, depthWrite: false,
+        })
       );
       glow.rotation.x = -Math.PI / 2;
       glow.position.y = 0.01;
@@ -800,7 +723,7 @@ export class CafeScene {
     group.userData.userId = id;
     this.scene.add(group);
 
-    const avatarKey = `${avatar.bodyColor}_${(avatar.accessories||[]).sort().join(',')}`;
+    const avatarKey = `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}`;
     this.characterSprites.set(id, { group, sprite, nameTag, avatarKey });
   }
 
@@ -828,11 +751,12 @@ export class CafeScene {
         return tableData.position;
       }
     }
+    // 테이블 없으면 카운터 근처 대기 위치
     const hash = userId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
     const slots = [
-      { x: -4.0, z: 6.2 }, { x: -2.8, z: 6.5 }, { x: -5.2, z: 6.0 },
-      { x: -1.8, z: 6.2 }, { x: -5.5, z: 5.2 }, { x: -3.4, z: 5.5 },
-      { x: -0.8, z: 6.5 }, { x: -4.5, z: 6.8 }, { x: -2.2, z: 6.8 },
+      { x: -4.5, z: 5.5 }, { x: -3.2, z: 6.5 }, { x: -6.0, z: 5.0 },
+      { x: -2.0, z: 5.8 }, { x: -5.0, z: 6.0 }, { x: -1.0, z: 6.2 },
+      { x: 3.0,  z: 5.5 }, { x: 5.0,  z: 5.0 }, { x: 4.0,  z: 6.0 },
     ];
     return slots[hash % slots.length];
   }
@@ -866,11 +790,16 @@ export class CafeScene {
     }
   }
 
+  // ── 동적 테이블 확장 ─────────────────────────────────────
   expandTables(newCount) {
     if (newCount <= this._tableCount) return;
-    const positions = this._generateTablePositions(newCount);
+    // 외곽 링에 추가 테이블 배치
     for (let i = this._tableCount; i < newCount; i++) {
-      if (positions[i]) this._createTable(`table_${i}`, positions[i].x, positions[i].z, SEATS_PER_TABLE);
+      const angle  = (i * Math.PI * 2) / 8;
+      const radius = TILE_SIZE * 2.2 + Math.floor(i / 8) * TILE_SIZE;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      this._createTable(`table_${i}`, x, z, SEATS_PER_TABLE);
     }
     this._tableCount = newCount;
   }

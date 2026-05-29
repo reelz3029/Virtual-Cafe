@@ -34,6 +34,9 @@ export class WorldRenderer {
       velocity:  { x: 0, z: 0 },
     };
 
+    // 키보드 입력 상태 (WASD + 방향키)
+    this._keys = {};
+
     // 캐릭터 diff용 이전 상태 스냅샷
     this._prevUsers = new Map(); // userId → snapshot string
 
@@ -143,6 +146,45 @@ export class WorldRenderer {
     this.canvas.addEventListener('wheel',      e => this._onWheel(e), { passive: true });
     window.addEventListener('resize',          () => this._onResize());
     document.addEventListener('mouseleave',    () => this._hideTableTooltip());
+
+    // WASD + 방향키 패닝 (input/textarea 포커스 중에는 무시)
+    window.addEventListener('keydown', e => {
+      const tag = document.activeElement?.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      this._keys[e.key] = true;
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', e => { this._keys[e.key] = false; });
+  }
+
+  // ── 키보드 카메라 이동 ─────────────────────────────────────
+  // 아이소메트릭 45° 다이아몬드 이동
+  // W/↑: 화면 위 = 월드 (-x, -z) 방향
+  // S/↓: 화면 아래 = 월드 (+x, +z)
+  // A/←: 화면 왼쪽 = 월드 (-x, +z)
+  // D/→: 화면 오른쪽 = 월드 (+x, -z)
+  _applyKeyMovement(delta) {
+    const tag = document.activeElement?.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+
+    const k = this._keys;
+    const speed = this._cam.zoom * 2.8 * delta;
+    const diag  = speed * 0.707; // 1/√2
+
+    let mx = 0, mz = 0;
+    if (k['w'] || k['W'] || k['ArrowUp'])    { mx -= diag; mz -= diag; }
+    if (k['s'] || k['S'] || k['ArrowDown'])  { mx += diag; mz += diag; }
+    if (k['a'] || k['A'] || k['ArrowLeft'])  { mx -= diag; mz += diag; }
+    if (k['d'] || k['D'] || k['ArrowRight']) { mx += diag; mz -= diag; }
+
+    if (mx || mz) {
+      this._cam.target.x += mx;
+      this._cam.target.z += mz;
+      this._cam.velocity = { x: 0, z: 0 };
+      this._updateCameraPosition();
+    }
   }
 
   _onMouseDown(e) {
@@ -364,9 +406,9 @@ export class WorldRenderer {
     }
 
     this._hideTableTooltip();
-    // 멀티플레이어 시작 — 씬 이름 전달로 Firebase 경로 분리
+    // 멀티플레이어 시작 — 씬에서 생성된 테이블 수 그대로 전달
     multiplayerSim.stop();
-    multiplayerSim.start(8, sceneName);
+    multiplayerSim.start(this._activeScene.tableCount, sceneName);
   }
 
   // ── 캐릭터 diff 업데이트 ─────────────────────────────────
@@ -423,6 +465,9 @@ export class WorldRenderer {
       const delta = this._clock.getDelta();
       const now   = performance.now();
 
+      // 키보드 이동 (WASD + 방향키)
+      this._applyKeyMovement(delta);
+
       // 관성 (팬 후 천천히 멈춤)
       if (!this._cam.isDragging) {
         const friction = 0.87;
@@ -434,6 +479,9 @@ export class WorldRenderer {
           this._updateCameraPosition();
         }
       }
+
+      // 무한 타일 랩핑 — 카메라 위치 기준으로 타일 재배치
+      this._activeScene?.updateTiles(this._cam.target);
 
       // 캐릭터 diff 업데이트 (600ms마다) — 변경 없으면 즉시 리턴
       if (now - lastCharUpdate > 600) {
