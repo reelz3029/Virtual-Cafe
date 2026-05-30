@@ -96,6 +96,12 @@ export class CafeScene {
     this._buildFloor();
     this._buildIslandCounter();
     this._buildTileGrid();
+
+    // 타일 시스템이 거리 기반 재배치를 담당하므로 Three.js 프러스텀 컬링 불필요
+    // — Mesh 전체 비활성화: 팝인/팝아웃 없이 부드러운 스크롤 보장
+    this.scene.traverse(obj => {
+      if (obj.isMesh) obj.frustumCulled = false;
+    });
   }
 
   get tableCount() { return this._tableCount; }
@@ -486,6 +492,8 @@ export class CafeScene {
     nameTag.position.y = 1.32;
     group.add(nameTag);
 
+    group.traverse(obj => { if (obj.isSprite) obj.frustumCulled = false; });
+
     group.position.set(x, 0, z);
     this.scene.add(group);
     this._staffCatGroup = group;
@@ -825,6 +833,9 @@ export class CafeScene {
       glow.position.y = 0.01;
       group.add(glow);
     }
+
+    // Sprite는 중심점만으로 컬링 → 테이블보다 일찍 사라지는 문제 방지
+    group.traverse(obj => { if (obj.isSprite) obj.frustumCulled = false; });
 
     group.position.set(pos.x, 0, pos.z);
     group.userData.userId = id;
