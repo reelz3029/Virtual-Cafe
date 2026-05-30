@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
   createCharacterSprite,
   createNameTag,
@@ -193,10 +194,10 @@ export class CafeScene {
     });
 
     // 카운터 위 장비
-    this._buildCoffeeMachine(-0.9, cH, -0.2);
-    this._buildCoffeeMachine(0.5,  cH, -0.25);
-    this._addCupStack(1.5, cH, 0.3);
-    this._addCounterPlant(-1.6, cH, 0.5);
+    this._buildCoffeeMachine(-0.9, cH, -1.4, '/models/CoffeeMachine_Ragular.glb', 0.44);
+    this._buildCoffeeMachine( 0.5, cH, -1.4, '/models/CoffeeMacnine_Small.glb',   0.36);
+    this._addCupStack(1.5, cH, 1.4);
+    this._addCounterPlant(-2.0, cH+0.2, 0.7);
 
     // 메뉴 보드 폴 + 패널 (카운터 뒤 -z 방향)
     const poleH = 2.5;
@@ -328,15 +329,58 @@ export class CafeScene {
     this.scene.add(seat);
   }
 
-  _buildCoffeeMachine(x, baseY, z) {
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.52, 0.44, 0.36), mat(C.coffeeMachine)
-    );
+  _buildCoffeeMachine(x, baseY, z, modelPath, targetHeight = 0.42) {
+    const loader = new GLTFLoader();
+    loader.load(modelPath, (gltf) => {
+      const model = gltf.scene;
+
+      // 카페 분위기에 맞는 팔레트로 머테리얼 재매핑
+      model.traverse(child => {
+        if (!child.isMesh || !child.material) return;
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach(m => {
+          const hsl = { h: 0, s: 0, l: 0 };
+          (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
+
+          if (hsl.l > 0.65) {
+            // 밝은 부분 → 따뜻한 크림 (컵 트레이, 버튼 하이라이트)
+            m.color = new THREE.Color(0xE8D4A8);
+          } else if (hsl.l > 0.35) {
+            // 중간 톤 → 웜 브론즈 (패널 테두리, 손잡이)
+            m.color = new THREE.Color(0x7A5020);
+            if (m.metalness !== undefined) { m.metalness = 0.55; m.roughness = 0.45; }
+          } else {
+            // 어두운 부분 → 에스프레소 다크 브라운 (본체)
+            m.color = new THREE.Color(0x1E1008);
+            if (m.metalness !== undefined) { m.metalness = 0.35; m.roughness = 0.60; }
+          }
+          m.needsUpdate = true;
+        });
+      });
+
+      // 타겟 높이에 맞춰 스케일 자동 조정
+      const box = new THREE.Box3().setFromObject(model);
+      const modelH = box.getSize(new THREE.Vector3()).y;
+      if (modelH > 0) model.scale.setScalar(targetHeight / modelH);
+
+      // 중심 X/Z 정렬 + 바닥을 baseY에 맞춤
+      const box2 = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      box2.getCenter(center);
+      model.position.set(x - center.x, baseY - box2.min.y, z - center.z);
+
+      this.scene.add(model);
+    }, undefined, (err) => {
+      console.warn('[CoffeeMachine] GLB 로드 실패, 폴백 렌더링:', err);
+      this._buildCoffeeMachineFallback(x, baseY, z);
+    });
+  }
+
+  _buildCoffeeMachineFallback(x, baseY, z) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.44, 0.36), mat(C.coffeeMachine));
     body.position.set(x, baseY + 0.22, z);
     this.scene.add(body);
-    const wand = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.30, 6), mat(0x909090)
-    );
+    const wand = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.30, 6), mat(0x909090));
     wand.position.set(x + 0.30, baseY + 0.30, z);
     wand.rotation.z = 0.4;
     this.scene.add(wand);
