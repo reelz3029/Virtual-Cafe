@@ -25,20 +25,17 @@ const CelEdgeShader = {
     tDiffuse:      { value: null },
     tDepth:        { value: null },
     uResolution:   { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:    { value: new THREE.Color(0x2a1240) },  // 소프트 다크 퍼플
-    uDepthSens:    { value: 160.0 },
-    uColorSens:    { value: 2.0  },
-    uThickness:    { value: 1.1  },
-    // ── 핵심 수정: shadow color를 밝은 채도 높은 퍼플로 ──
-    // 이전 #2a0838 (lum≈0.06 거의 검정) → 중간톤이 어두운 회보라로 퇴색
-    // 수정 #8040A8 (lum≈0.26 밝은 퍼플) → 어두운 면도 채도 유지
-    uDuoShadow:    { value: new THREE.Color(0x8040a8) },  // 밝은 채도 퍼플
-    uDuoHighlight: { value: new THREE.Color(0xffd8f0) },  // 밝은 핑크-크림
-    uDuoStrength:  { value: 0.45 },  // shadow가 밝아졌으니 강도 올려도 칙칙하지 않음
-    uSatBoost:     { value: 1.30 },  // 채도 부스트 강화
-    uVignette:      { value: 0.18 },
-    uBloomStrength: { value: 0.40 },
-    uExposure:      { value: 1.15 },
+    uEdgeColor:    { value: new THREE.Color(0xE0B0CC) },
+    uDepthSens:    { value: 100.0 },
+    uColorSens:    { value: 1.4 },
+    uThickness:    { value: 0.9 },
+    uDuoShadow:    { value: new THREE.Color(0xEEDEFF) },
+    uDuoHighlight: { value: new THREE.Color(0xFFFBF0) },
+    uDuoStrength:  { value: 0.18 },
+    uSatBoost:     { value: 1.20 },
+    uVignette:      { value: 0.10 },
+    uBloomStrength: { value: 0.35 },
+    uExposure:      { value: 1.08 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -238,7 +235,7 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0x2A1835, 1);   // 짙은 퍼플 배경
+    this.renderer.setClearColor(0xEEE4FF, 1);   // 라이트 라벤더 배경
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.BasicShadowMap;  // 가장 빠른 그림자
 
@@ -257,17 +254,17 @@ export class WorldRenderer {
         tDiffuse:      { value: this._sceneTarget.texture },
         tDepth:        { value: this._sceneTarget.depthTexture },
         uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0x2a1240) },
-        uDepthSens:    { value: 160.0 },
-        uColorSens:    { value: 2.0 },
-        uThickness:    { value: 1.1 },
-        uDuoShadow:    { value: new THREE.Color(0x9040b8) },
-        uDuoHighlight: { value: new THREE.Color(0xfff4ff) },  // 더 밝은 화이트핑크
-        uDuoStrength:  { value: 0.35 },  // 낮춰서 원본 색 더 살림
-        uSatBoost:     { value: 1.55 },
-        uVignette:     { value: 0.18 },
-        uBloomStrength:{ value: 0.40 },
-        uExposure:     { value: 1.15 },
+        uEdgeColor:    { value: new THREE.Color(0xE0B0CC) },
+        uDepthSens:    { value: 100.0 },
+        uColorSens:    { value: 1.4 },
+        uThickness:    { value: 0.9 },
+        uDuoShadow:    { value: new THREE.Color(0xEEDEFF) },
+        uDuoHighlight: { value: new THREE.Color(0xFFFBF0) },
+        uDuoStrength:  { value: 0.18 },
+        uSatBoost:     { value: 1.20 },
+        uVignette:     { value: 0.10 },
+        uBloomStrength:{ value: 0.35 },
+        uExposure:     { value: 1.08 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
