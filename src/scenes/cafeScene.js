@@ -339,18 +339,24 @@ export class CafeScene {
         if (!child.isMesh || !child.material) return;
         const mats = Array.isArray(child.material) ? child.material : [child.material];
         mats.forEach(m => {
+          // GRID 머테리얼 → 커피머신 배수 그레이팅 텍스처
+          if (m.name && /grid/i.test(m.name)) {
+            m.color = new THREE.Color(0xA87830);
+            m.map = this._getDrainGridTexture();
+            if (m.metalness !== undefined) { m.metalness = 0.75; m.roughness = 0.30; }
+            m.needsUpdate = true;
+            return;
+          }
+
           const hsl = { h: 0, s: 0, l: 0 };
           (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
 
           if (hsl.l > 0.65) {
-            // 밝은 부분 → 따뜻한 크림 (컵 트레이, 버튼 하이라이트)
             m.color = new THREE.Color(0xE8D4A8);
           } else if (hsl.l > 0.35) {
-            // 중간 톤 → 웜 브론즈 (패널 테두리, 손잡이)
             m.color = new THREE.Color(0x7A5020);
             if (m.metalness !== undefined) { m.metalness = 0.55; m.roughness = 0.45; }
           } else {
-            // 어두운 부분 → 에스프레소 다크 브라운 (본체)
             m.color = new THREE.Color(0x1E1008);
             if (m.metalness !== undefined) { m.metalness = 0.35; m.roughness = 0.60; }
           }
@@ -374,6 +380,61 @@ export class CafeScene {
       console.warn('[CoffeeMachine] GLB 로드 실패, 폴백 렌더링:', err);
       this._buildCoffeeMachineFallback(x, baseY, z);
     });
+  }
+
+  _getDrainGridTexture() {
+    if (this._drainGridTex) return this._drainGridTex;
+
+    const SIZE = 256, CELL = 20, BAR = 4;
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE; canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+
+    // 바닥 — 물 고이는 깊은 홈 (매우 어두운 브라운)
+    ctx.fillStyle = '#080402';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // 가로 바: 위쪽 하이라이트 → 본체 브론즈 → 아래쪽 그림자
+    for (let y = 0; y < SIZE; y += CELL) {
+      const grad = ctx.createLinearGradient(0, y, 0, y + BAR);
+      grad.addColorStop(0.0, '#D4A040');   // 하이라이트 (황금 반사)
+      grad.addColorStop(0.35, '#9A6C24');  // 본체 브론즈
+      grad.addColorStop(1.0, '#3A1E08');   // 그림자
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, y, SIZE, BAR);
+    }
+
+    // 세로 바: 왼쪽 하이라이트 → 본체 → 오른쪽 그림자
+    for (let x = 0; x < SIZE; x += CELL) {
+      const grad = ctx.createLinearGradient(x, 0, x + BAR, 0);
+      grad.addColorStop(0.0, '#C89830');
+      grad.addColorStop(0.35, '#9A6C24');
+      grad.addColorStop(1.0, '#3A1E08');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, 0, BAR, SIZE);
+    }
+
+    // 교차점 — 약간 더 밝게 (리벳 느낌)
+    ctx.fillStyle = '#DDB040';
+    for (let y = 0; y < SIZE; y += CELL) {
+      for (let x = 0; x < SIZE; x += CELL) {
+        ctx.fillRect(x, y, BAR, BAR);
+      }
+    }
+
+    // 홀 내부에 미세한 반사 스팟 (물기 광택)
+    ctx.fillStyle = 'rgba(255,200,100,0.07)';
+    for (let y = 0; y < SIZE; y += CELL) {
+      for (let x = 0; x < SIZE; x += CELL) {
+        const hx = x + BAR + 3, hy = y + BAR + 3;
+        if (hx < x + CELL && hy < y + CELL) ctx.fillRect(hx, hy, 3, 3);
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    this._drainGridTex = tex;
+    return tex;
   }
 
   _buildCoffeeMachineFallback(x, baseY, z) {
