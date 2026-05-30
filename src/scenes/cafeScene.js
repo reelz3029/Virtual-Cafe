@@ -14,13 +14,14 @@ import {
 import { store } from '../store/gameStore.js';
 
 // ── 툰 그라디언트 맵 (전역 공유) ─────────────────────────────
-// 4-step: shadow(128)→mid(175)→light(220)→highlight(255)
-// 최소값 128(50%)로 밝은 분위기 유지
+// 3-step: shadow(85)→lit(175)→highlight(255)
+// 스텝 수를 줄이고 대비를 높여 카툰 느낌 강화
+// 최소값 85(33%)로 어두운 영역도 완전히 검지 않게 유지
 let _toonGradientMap = null;
 function getToonGradientMap() {
   if (_toonGradientMap) return _toonGradientMap;
-  const colors = new Uint8Array([128, 175, 220, 255]);
-  const tex = new THREE.DataTexture(colors, 4, 1);
+  const colors = new Uint8Array([85, 175, 255]);
+  const tex = new THREE.DataTexture(colors, 3, 1);
   tex.format = THREE.RedFormat;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
@@ -128,19 +129,23 @@ export class CafeScene {
   get gridSpan()   { return GRID_SPAN; }  // 카메라 토로이달 랩핑에 사용
 
   // ── 조명 ─────────────────────────────────────────────────
+  // AmbientLight를 낮춰야 MeshToonMaterial의 스텝 그라디언트가 보임
+  // (기존 1.0이면 씬 전체가 포화 → 모든 폴리곤이 최고 밝기 스텝으로 고정)
   _setupLights() {
-    this.scene.add(new THREE.AmbientLight(0xFFF4E0, 1.0));
+    this.scene.add(new THREE.AmbientLight(0xFFF4E0, 0.55));
 
-    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.0);
+    // 메인 태양광 — 방향 유지, 강도 상향으로 하이라이트 선명하게
+    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.6);
     sun.position.set(9, 14, 9);
     this.scene.add(sun);
 
-    const fill = new THREE.DirectionalLight(0xF0DCC0, 0.3);
+    // 반사 보조광 (반대편 그림자 채움)
+    const fill = new THREE.DirectionalLight(0xF0DCC0, 0.25);
     fill.position.set(-5, 8, -5);
     this.scene.add(fill);
 
-    // 카운터 위 따뜻한 포인트 라이트
-    const cl = new THREE.PointLight(0xFFD080, 1.2, 12);
+    // 카운터 위 따뜻한 포인트 라이트 (카운터 지역 국소 밝기)
+    const cl = new THREE.PointLight(0xFFD080, 1.4, 10);
     cl.position.set(0, 3.8, 0);
     this.scene.add(cl);
   }

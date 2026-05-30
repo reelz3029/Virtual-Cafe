@@ -9,10 +9,77 @@
  */
 
 import * as THREE from 'three';
-import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass }     from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass }     from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { store, setSeat, showNotification } from '../store/gameStore.js';
-import { CafeScene } from '../scenes/cafeScene.js';
-import { multiplayerSim } from './multiplayerSim.js';
+import { CafeScene }       from '../scenes/cafeScene.js';
+import { multiplayerSim }  from './multiplayerSim.js';
+
+// ── Cel Shading Edge Detection Shader ────────────────────────────────────────
+// 렌더링된 씬의 색상(tDiffuse)과 깊이(tDepth)를 입력받아
+// Sobel 연산으로 윤곽선을 검출하여 합성하는 풀스크린 패스.
+// OutlineEffect 대비: 드로우콜 O(1) vs O(mesh count × 2)
+const CelEdgeShader = {
+  name: 'CelEdgeShader',
+  uniforms: {
+    tDiffuse:    { value: null },
+    tDepth:      { value: null },
+    uResolution: { value: new THREE.Vector2(1, 1) },
+    uEdgeColor:  { value: new THREE.Color(0x1a0e04) },
+    uDepthSens:  { value: 260.0 },  // 깊이 기반 실루엣 감도
+    uColorSens:  { value: 3.5  },   // 색상 경계 감도
+    uThickness:  { value: 1.4  },   // 픽셀 단위 두께
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tDepth;
+    uniform vec2      uResolution;
+    uniform vec3      uEdgeColor;
+    uniform float     uDepthSens;
+    uniform float     uColorSens;
+    uniform float     uThickness;
+    varying vec2 vUv;
+
+    float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+    void main() {
+      vec2 px = uThickness / uResolution;
+
+      // ── 색상 Sobel (색 경계 검출) ──────────────────
+      vec3 cN = texture2D(tDiffuse, vUv + vec2( 0.0,  px.y)).rgb;
+      vec3 cS = texture2D(tDiffuse, vUv + vec2( 0.0, -px.y)).rgb;
+      vec3 cE = texture2D(tDiffuse, vUv + vec2( px.x, 0.0 )).rgb;
+      vec3 cW = texture2D(tDiffuse, vUv + vec2(-px.x, 0.0 )).rgb;
+      float lx = lum(cE) - lum(cW);
+      float ly = lum(cN) - lum(cS);
+      float colorEdge = sqrt(lx*lx + ly*ly) * uColorSens;
+
+      // ── 깊이 Sobel (실루엣/형태 경계 검출) ─────────
+      float dN = texture2D(tDepth, vUv + vec2( 0.0,  px.y)).r;
+      float dS = texture2D(tDepth, vUv + vec2( 0.0, -px.y)).r;
+      float dE = texture2D(tDepth, vUv + vec2( px.x, 0.0 )).r;
+      float dW = texture2D(tDepth, vUv + vec2(-px.x, 0.0 )).r;
+      float dx = dE - dW;
+      float dy = dN - dS;
+      float depthEdge = sqrt(dx*dx + dy*dy) * uDepthSens;
+
+      // 두 채널 중 강한 쪽 사용
+      float edge = clamp(max(colorEdge, depthEdge), 0.0, 1.0);
+
+      vec4 base = texture2D(tDiffuse, vUv);
+      gl_FragColor = mix(base, vec4(uEdgeColor, 1.0), edge);
+    }
+  `,
+};
 
 export class WorldRenderer {
   constructor(canvas) {
@@ -119,24 +186,41 @@ export class WorldRenderer {
 
   // ── Three.js 초기화 ──────────────────────────────────────
   _initRenderer() {
+    const W = window.innerWidth, H = window.innerHeight;
+
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: window.devicePixelRatio < 2,
+      antialias: false,          // 렌더타겟 출력 시 antialias는 OutputPass에서 처리
       alpha: false,
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(W, H);
     this.renderer.setClearColor(0xF0E8D4, 1);
     this.renderer.shadowMap.enabled = false;
 
-    // 카툰 렌더링: 모든 메시 외곽선 자동 추가
-    // defaultThickness: 월드 유닛 기준 선 두께 (아이소메트릭 zoom 6 기준 적합)
-    this.outlineEffect = new OutlineEffect(this.renderer, {
-      defaultThickness: 0.0022,
-      defaultColor: new THREE.Color(0x1a0e04), // 따뜻한 다크 브라운 아웃라인
-      defaultAlpha: 0.85,
+    // ── EffectComposer 셋업 ──────────────────────────────────
+    // 깊이 텍스처 포함 렌더타겟 — CelEdge 셰이더에서 tDepth로 참조
+    this._renderTarget = new THREE.WebGLRenderTarget(W, H, {
+      depthTexture: new THREE.DepthTexture(W, H, THREE.UnsignedShortType),
+      depthBuffer: true,
+      stencilBuffer: false,
     });
+
+    this.composer = new EffectComposer(this.renderer, this._renderTarget);
+
+    // Pass 1: 씬 렌더 (color + depth 동시 기록)
+    this.renderPass = new RenderPass(new THREE.Scene(), this.camera);
+    this.composer.addPass(this.renderPass);
+
+    // Pass 2: Cel 윤곽선 검출 (풀스크린 셰이더, 드로우콜 1개)
+    this.celEdgePass = new ShaderPass(CelEdgeShader);
+    this.celEdgePass.uniforms['tDepth'].value      = this._renderTarget.depthTexture;
+    this.celEdgePass.uniforms['uResolution'].value.set(W, H);
+    this.composer.addPass(this.celEdgePass);
+
+    // Pass 3: 감마 보정 출력
+    this.composer.addPass(new OutputPass());
   }
 
   _initCamera() {
@@ -399,7 +483,11 @@ export class WorldRenderer {
   }
 
   _onResize() {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    const W = window.innerWidth, H = window.innerHeight;
+    this.renderer.setSize(W, H);
+    this._renderTarget.setSize(W, H);
+    this.composer.setSize(W, H);
+    this.celEdgePass.uniforms['uResolution'].value.set(W, H);
     this._updateCameraFrustum();
   }
 
@@ -554,9 +642,10 @@ export class WorldRenderer {
       // 씬 update (스프라이트 float 등)
       this._activeScene?.update(this.camera, delta);
 
-      // 렌더 (OutlineEffect → 카툰 외곽선 자동 적용)
+      // 렌더 (EffectComposer: RenderPass → CelEdge → OutputPass)
       if (this._activeScene) {
-        this.outlineEffect.render(this._activeScene.scene, this.camera);
+        this.renderPass.scene = this._activeScene.scene;
+        this.composer.render(delta);
       }
     };
 
@@ -573,7 +662,8 @@ export class WorldRenderer {
   dispose() {
     this.stop();
     this._activeScene?.dispose();
+    this._renderTarget?.dispose();
+    this.composer?.dispose();
     this.renderer.dispose();
-    this.outlineEffect = null;
   }
 }
