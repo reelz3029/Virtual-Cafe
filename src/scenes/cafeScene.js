@@ -19,10 +19,10 @@ import { store } from '../store/gameStore.js';
 let _toonGradientMap = null;
 function getToonGradientMap() {
   if (_toonGradientMap) return _toonGradientMap;
-  // 3-step 하드 셀 셰이딩 — 그림자/미드톤/하이라이트 명확한 만화풍
-  const colors = new Uint8Array([60, 160, 255]);
-  const tex = new THREE.DataTexture(colors, 3, 1);
-  tex.format = THREE.RedFormat;
+  // 3-step 셀 셰이딩: 90=그림자(파스텔 중간), 160=미드, 255=하이라이트
+  // 90/255=35% — 앰비언트 1.2와 조합하면 그림자 면도 충분히 밝음
+  const colors = new Uint8Array([90, 160, 255]);
+  const tex = new THREE.DataTexture(colors, 3, 1, THREE.RedFormat);
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
@@ -133,10 +133,15 @@ export class CafeScene {
     this._buildIslandCounter();
     this._buildTileGrid();
 
-    // 타일 시스템이 거리 기반 재배치를 담당하므로 Three.js 프러스텀 컬링 불필요
-    // — Mesh 전체 비활성화: 팝인/팝아웃 없이 부드러운 스크롤 보장
+    // 프러스텀 컬링 비활성화 + 모든 MeshToonMaterial에 그라디언트맵 재적용
+    const gm = getToonGradientMap();
     this.scene.traverse(obj => {
-      if (obj.isMesh) obj.frustumCulled = false;
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      if (obj.material?.isMeshToonMaterial) {
+        obj.material.gradientMap = gm;
+        obj.material.needsUpdate = true;
+      }
     });
   }
 
@@ -147,32 +152,33 @@ export class CafeScene {
   // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
   // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
-    // 웜 아프리콧 배경
+    // ── 기존 라이트 전체 제거 (이전 이터레이션 누적 방지) ──────
+    this.scene.children
+      .filter(obj => obj.isLight)
+      .forEach(light => this.scene.remove(light));
+
     this.scene.background = new THREE.Color(0xFFE8D6);
+    this.scene.fog = new THREE.FogExp2(0xFFE8F0, 0.005);
 
-    // 분홍 대기 안개 — 밀도 낮춤 (너무 진하면 멀리 흐려짐)
-    this.scene.fog = new THREE.FogExp2(0xFFE8F0, 0.006);
+    // STEP 1 — 글로벌 앰비언트 (사양서 그대로)
+    const ambient = new THREE.AmbientLight(0xFFF0F5, 1.2);
+    this.scene.add(ambient);
 
-    // 앰비언트: 사양서 #FFF0F5 intensity 1.0 — 장면이 항상 밝아야 함
-    this.scene.add(new THREE.AmbientLight(0xFFF0F5, 1.0));
+    // STEP 2 — 메인 디렉셔널 (따뜻한 황금 오후, 45° 위)
+    const dirLight = new THREE.DirectionalLight(0xFFEED6, 1.4);
+    dirLight.position.set(5, 10, 5);
+    dirLight.castShadow = false;
+    this.scene.add(dirLight);
 
-    // 메인 디렉셔널: 그림자맵 OFF (평면 카툰 그림자 사용)
-    const sun = new THREE.DirectionalLight(0xFFF0F5, 1.20);
-    sun.position.set(9, 14, 9);
-    this.scene.add(sun);
+    // STEP 3 — 소프트 필 라이트 (반대편 — 그림자 면 파스텔 미드톤 유지)
+    const fillLight = new THREE.DirectionalLight(0xFFD6E8, 0.6);
+    fillLight.position.set(-5, 5, -5);
+    this.scene.add(fillLight);
 
-    // 카운터: 골든 포인트 (사양서 #FFD700, 0.6)
-    const counterL = new THREE.PointLight(0xFFD700, 0.60, 14);
-    counterL.position.set(0, 3.8, 0);
-    this.scene.add(counterL);
-
-    // 좌/우 민트 필 (사양서 #B5EAD7, 0.3)
-    const mintL = new THREE.PointLight(0xB5EAD7, 0.30, 24);
-    mintL.position.set(-9, 4, 0);
-    this.scene.add(mintL);
-    const mintR = new THREE.PointLight(0xB5EAD7, 0.30, 24);
-    mintR.position.set(9, 4, 0);
-    this.scene.add(mintR);
+    // STEP 4 — 황금 중앙 포인트 (사양서 그대로)
+    const warmPoint = new THREE.PointLight(0xFFD700, 0.8, 30);
+    warmPoint.position.set(0, 6, 0);
+    this.scene.add(warmPoint);
   }
 
   // ── 무한 바닥 (대형 평면 + 시임리스 벽돌 텍스처) ───────────

@@ -234,8 +234,11 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0xFFE8D6, 1);   // 웜 아프리콧 배경
-    this.renderer.shadowMap.enabled = false;  // 카툰 평면 그림자로 대체
+    this.renderer.setClearColor(0xFFE8D6, 1);
+    this.renderer.shadowMap.enabled = false;
+    // 렌더러 레벨 톤매핑 완전 해제 — ACESFilmic/Reinhard 등이 파스텔 색상을 어둡게 압축함
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
     // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
