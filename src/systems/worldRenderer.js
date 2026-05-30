@@ -14,20 +14,23 @@ import { store, setSeat, showNotification } from '../store/gameStore.js';
 import { CafeScene }       from '../scenes/cafeScene.js';
 import { multiplayerSim }  from './multiplayerSim.js';
 
-// ── Cel Shading Edge Detection Shader ────────────────────────────────────────
-// 렌더링된 씬의 색상(tDiffuse)과 깊이(tDepth)를 입력받아
-// Sobel 연산으로 윤곽선을 검출하여 합성하는 풀스크린 패스.
-// OutlineEffect 대비: 드로우콜 O(1) vs O(mesh count × 2)
+// ── Cel Shading + Duotone Post-Process Shader ────────────────────────────────
+// Pass 1: 색상/깊이 Sobel로 윤곽선 검출
+// Pass 2: 듀오톤 매핑 — luminance 0→shadow색(네이비), 1→highlight색(크림)
+// 레퍼런스 스타일: 탈색된 카툰 + 단방향 조명 그림자
 const CelEdgeShader = {
   name: 'CelEdgeShader',
   uniforms: {
-    tDiffuse:    { value: null },
-    tDepth:      { value: null },
-    uResolution: { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:  { value: new THREE.Color(0x1a0e04) },
-    uDepthSens:  { value: 260.0 },  // 깊이 기반 실루엣 감도
-    uColorSens:  { value: 3.5  },   // 색상 경계 감도
-    uThickness:  { value: 1.4  },   // 픽셀 단위 두께
+    tDiffuse:      { value: null },
+    tDepth:        { value: null },
+    uResolution:   { value: new THREE.Vector2(1, 1) },
+    uEdgeColor:    { value: new THREE.Color(0x080e18) },  // 아웃라인: 짙은 네이비
+    uDepthSens:    { value: 220.0 },
+    uColorSens:    { value: 2.8  },
+    uThickness:    { value: 1.2  },
+    uDuoShadow:    { value: new THREE.Color(0x0c1622) },  // 어두운 쿨 네이비
+    uDuoHighlight: { value: new THREE.Color(0xe8dfc0) },  // 따뜻한 크림
+    uDuoStrength:  { value: 0.88 },   // 듀오톤 강도 (0=원본, 1=완전 듀오톤)
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -44,6 +47,9 @@ const CelEdgeShader = {
     uniform float     uDepthSens;
     uniform float     uColorSens;
     uniform float     uThickness;
+    uniform vec3      uDuoShadow;
+    uniform vec3      uDuoHighlight;
+    uniform float     uDuoStrength;
     varying vec2 vUv;
 
     float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -51,7 +57,7 @@ const CelEdgeShader = {
     void main() {
       vec2 px = uThickness / uResolution;
 
-      // ── 색상 Sobel (색 경계 검출) ──────────────────
+      // ── 색상 Sobel ──────────────────────────────────
       vec3 cN = texture2D(tDiffuse, vUv + vec2( 0.0,  px.y)).rgb;
       vec3 cS = texture2D(tDiffuse, vUv + vec2( 0.0, -px.y)).rgb;
       vec3 cE = texture2D(tDiffuse, vUv + vec2( px.x, 0.0 )).rgb;
@@ -60,7 +66,7 @@ const CelEdgeShader = {
       float ly = lum(cN) - lum(cS);
       float colorEdge = sqrt(lx*lx + ly*ly) * uColorSens;
 
-      // ── 깊이 Sobel (실루엣/형태 경계 검출) ─────────
+      // ── 깊이 Sobel ──────────────────────────────────
       float dN = texture2D(tDepth, vUv + vec2( 0.0,  px.y)).r;
       float dS = texture2D(tDepth, vUv + vec2( 0.0, -px.y)).r;
       float dE = texture2D(tDepth, vUv + vec2( px.x, 0.0 )).r;
@@ -69,11 +75,17 @@ const CelEdgeShader = {
       float dy = dN - dS;
       float depthEdge = sqrt(dx*dx + dy*dy) * uDepthSens;
 
-      // 두 채널 중 강한 쪽 사용
       float edge = clamp(max(colorEdge, depthEdge), 0.0, 1.0);
 
+      // ── 듀오톤 매핑 ─────────────────────────────────
       vec4 base = texture2D(tDiffuse, vUv);
-      gl_FragColor = mix(base, vec4(uEdgeColor, 1.0), edge);
+      float l = lum(base.rgb);
+      // 감마 보정: 중간톤 콘트라스트 강화
+      l = pow(l, 0.85);
+      vec3 duotone   = mix(uDuoShadow, uDuoHighlight, l);
+      vec3 finalRgb  = mix(base.rgb, duotone, uDuoStrength);
+
+      gl_FragColor = mix(vec4(finalRgb, 1.0), vec4(uEdgeColor, 1.0), edge);
     }
   `,
 };
@@ -193,8 +205,9 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0xF0E8D4, 1);
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.setClearColor(0x0d1620, 1);   // 짙은 네이비 배경
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
     // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
@@ -208,13 +221,16 @@ export class WorldRenderer {
 
     this._celEdgeMat = new THREE.ShaderMaterial({
       uniforms: {
-        tDiffuse:    { value: this._sceneTarget.texture },
-        tDepth:      { value: this._sceneTarget.depthTexture },
-        uResolution: { value: new THREE.Vector2(W, H) },
-        uEdgeColor:  { value: new THREE.Color(0x1a0e04) },
-        uDepthSens:  { value: 260.0 },
-        uColorSens:  { value: 3.5 },
-        uThickness:  { value: 1.4 },
+        tDiffuse:      { value: this._sceneTarget.texture },
+        tDepth:        { value: this._sceneTarget.depthTexture },
+        uResolution:   { value: new THREE.Vector2(W, H) },
+        uEdgeColor:    { value: new THREE.Color(0x080e18) },
+        uDepthSens:    { value: 220.0 },
+        uColorSens:    { value: 2.8 },
+        uThickness:    { value: 1.2 },
+        uDuoShadow:    { value: new THREE.Color(0x0c1622) },
+        uDuoHighlight: { value: new THREE.Color(0xe8dfc0) },
+        uDuoStrength:  { value: 0.88 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
@@ -633,6 +649,15 @@ export class WorldRenderer {
 
       // 무한 타일 랩핑 — 카메라 위치 기준으로 타일 재배치
       this._activeScene?.updateTiles(this._cam.target);
+
+      // 태양광 + 그림자 카메라를 카메라 타겟 추종
+      // 무한 월드에서 어디서든 그림자가 정확하게 떨어지도록
+      if (this._activeScene?.sunLight) {
+        const t = this._cam.target;
+        this._activeScene.sunLight.position.set(t.x + 9, 14, t.z + 9);
+        this._activeScene.sunLight.target.position.set(t.x, 0, t.z);
+        this._activeScene.sunLight.target.updateMatrixWorld();
+      }
 
       // 캐릭터 diff 업데이트 (600ms마다) — 변경 없으면 즉시 리턴
       if (now - lastCharUpdate > 600) {
