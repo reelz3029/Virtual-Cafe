@@ -9,115 +9,11 @@
  */
 
 import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { store, setSeat, showNotification } from '../store/gameStore.js';
 import { CafeScene }       from '../scenes/cafeScene.js';
 import { multiplayerSim }  from './multiplayerSim.js';
 
-// ── Cel Shading + Duotone + Vignette Post-Process Shader ─────────────────────
-// 1. 색상/깊이 Sobel → 아웃라인 (얇고 소프트한 다크 퍼플)
-// 2. 듀오톤 매핑 → 카와이 색감 그레이딩 (shadow=짙은퍼플, highlight=핑크크림)
-// 3. 채도 부스트 → 파스텔 일러스트 느낌
-// 4. 비녜트 → 화면 가장자리 자연스러운 어두움, 깊이감
-const CelEdgeShader = {
-  name: 'CelEdgeShader',
-  uniforms: {
-    tDiffuse:      { value: null },
-    tDepth:        { value: null },
-    uResolution:   { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:    { value: new THREE.Color(0x3D1C2E) },  // 다크 퍼플-브라운 아웃라인
-    uDepthSens:    { value: 220.0 },  // 강한 실루엣 엣지
-    uColorSens:    { value: 3.5  },   // 강한 색상 경계
-    uThickness:    { value: 1.4  },
-    uDuoShadow:    { value: new THREE.Color(0xFFE4E8) },
-    uDuoHighlight: { value: new THREE.Color(0xFFFBF5) },
-    uDuoStrength:  { value: 0.0  },   // 듀오톤 OFF — 재질 색상 그대로
-    uSatBoost:     { value: 1.0  },   // 채도 보정 없음 (재질이 직접 색 담당)
-    uVignette:      { value: 0.08 },
-    uBloomStrength: { value: 0.22 },  // 램프 글로우만
-    uExposure:      { value: 1.0  },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse;
-    uniform sampler2D tDepth;
-    uniform vec2      uResolution;
-    uniform vec3      uEdgeColor;
-    uniform float     uDepthSens;
-    uniform float     uColorSens;
-    uniform float     uThickness;
-    uniform vec3      uDuoShadow;
-    uniform vec3      uDuoHighlight;
-    uniform float     uDuoStrength;
-    uniform float     uSatBoost;
-    uniform float     uVignette;
-    uniform float     uBloomStrength;
-    uniform float     uExposure;
-    varying vec2 vUv;
 
-    float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-
-    void main() {
-      vec2 px = uThickness / uResolution;
-
-      // ── 색상 Sobel ─────────────────────────────────
-      vec3 cN = texture2D(tDiffuse, vUv + vec2( 0.0,  px.y)).rgb;
-      vec3 cS = texture2D(tDiffuse, vUv + vec2( 0.0, -px.y)).rgb;
-      vec3 cE = texture2D(tDiffuse, vUv + vec2( px.x, 0.0 )).rgb;
-      vec3 cW = texture2D(tDiffuse, vUv + vec2(-px.x, 0.0 )).rgb;
-      float lx = lum(cE) - lum(cW);
-      float ly = lum(cN) - lum(cS);
-      float colorEdge = sqrt(lx*lx + ly*ly) * uColorSens;
-
-      // ── 깊이 Sobel ─────────────────────────────────
-      float dN = texture2D(tDepth, vUv + vec2( 0.0,  px.y)).r;
-      float dS = texture2D(tDepth, vUv + vec2( 0.0, -px.y)).r;
-      float dE = texture2D(tDepth, vUv + vec2( px.x, 0.0 )).r;
-      float dW = texture2D(tDepth, vUv + vec2(-px.x, 0.0 )).r;
-      float dx = dE - dW;
-      float dy = dN - dS;
-      float depthEdge = sqrt(dx*dx + dy*dy) * uDepthSens;
-
-      float edge = clamp(max(colorEdge, depthEdge), 0.0, 1.0);
-
-      // ── 듀오톤 컬러 그레이딩 ───────────────────────
-      vec4 base = texture2D(tDiffuse, vUv);
-      float l = lum(base.rgb);
-      l = pow(l, 0.85);
-      vec3 duotone  = mix(uDuoShadow, uDuoHighlight, l);
-      vec3 finalRgb = mix(base.rgb, duotone, uDuoStrength);
-
-      // ── 채도 부스트 ────────────────────────────────
-      float grayL = lum(finalRgb);
-      finalRgb = mix(vec3(grayL), finalRgb, uSatBoost);
-
-      // ── 블룸 (빛 산란 — 밝은 영역 글로우) ──────────
-      vec2 bpx = uThickness * 3.5 / uResolution;
-      vec3 bs  = texture2D(tDiffuse, vUv + vec2( bpx.x,  bpx.y)).rgb
-               + texture2D(tDiffuse, vUv + vec2(-bpx.x,  bpx.y)).rgb
-               + texture2D(tDiffuse, vUv + vec2( bpx.x, -bpx.y)).rgb
-               + texture2D(tDiffuse, vUv + vec2(-bpx.x, -bpx.y)).rgb;
-      bs *= 0.25;
-      finalRgb += bs * smoothstep(0.50, 0.82, lum(bs)) * uBloomStrength;
-
-      // ── 비녜트 ─────────────────────────────────────
-      vec2 vigOff = (vUv - 0.5) * 2.0;
-      float vign = 1.0 - dot(vigOff, vigOff) * uVignette;
-      finalRgb *= clamp(vign, 0.0, 1.0);
-
-      // 노출 보정만 (Reinhard 제거 — 파스텔 SDR 색상은 톤매핑 불필요)
-      finalRgb *= uExposure;
-
-      gl_FragColor = mix(vec4(finalRgb, 1.0), vec4(uEdgeColor, 1.0), edge);
-    }
-  `,
-};
 
 export class WorldRenderer {
   constructor(canvas) {
@@ -236,44 +132,8 @@ export class WorldRenderer {
     this.renderer.setSize(W, H);
     this.renderer.setClearColor(0xFFE8D6, 1);
     this.renderer.shadowMap.enabled = false;
-    // 렌더러 레벨 톤매핑 완전 해제 — ACESFilmic/Reinhard 등이 파스텔 색상을 어둡게 압축함
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1.0;
-
-    // ── Post-process 셋업 (EffectComposer 미사용) ────────────
-    // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
-    // 대신: 씬 → _sceneTarget(color+depth) → FullScreenQuad(CelEdge) → screen
-    // _sceneTarget은 쓰기 후 읽기만 하므로 Feedback loop 절대 없음
-    this._sceneTarget = new THREE.WebGLRenderTarget(W, H, {
-      depthTexture: new THREE.DepthTexture(W, H, THREE.UnsignedShortType),
-      depthBuffer: true,
-      stencilBuffer: false,
-    });
-
-    this._celEdgeMat = new THREE.ShaderMaterial({
-      uniforms: {
-        tDiffuse:      { value: this._sceneTarget.texture },
-        tDepth:        { value: this._sceneTarget.depthTexture },
-        uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0x3D1C2E) },
-        uDepthSens:    { value: 220.0 },
-        uColorSens:    { value: 3.5  },
-        uThickness:    { value: 1.4  },
-        uDuoShadow:    { value: new THREE.Color(0xFFE4E8) },
-        uDuoHighlight: { value: new THREE.Color(0xFFFBF5) },
-        uDuoStrength:  { value: 0.0  },
-        uSatBoost:     { value: 1.0  },
-        uVignette:     { value: 0.08 },
-        uBloomStrength:{ value: 0.22 },
-        uExposure:     { value: 1.0  },
-      },
-      vertexShader:   CelEdgeShader.vertexShader,
-      fragmentShader: CelEdgeShader.fragmentShader,
-      depthTest:  false,
-      depthWrite: false,
-    });
-
-    this._fsQuad = new FullScreenQuad(this._celEdgeMat);
   }
 
   _initCamera() {
@@ -538,8 +398,6 @@ export class WorldRenderer {
   _onResize() {
     const W = window.innerWidth, H = window.innerHeight;
     this.renderer.setSize(W, H);
-    this._sceneTarget.setSize(W, H);
-    this._celEdgeMat.uniforms['uResolution'].value.set(W, H);
     this._updateCameraFrustum();
   }
 
@@ -694,12 +552,8 @@ export class WorldRenderer {
       // 씬 update (스프라이트 float 등)
       this._activeScene?.update(this.camera, delta);
 
-      // 렌더: 씬 → _sceneTarget(color+depth) → FullScreenQuad CelEdge → screen
       if (this._activeScene) {
-        this.renderer.setRenderTarget(this._sceneTarget);
         this.renderer.render(this._activeScene.scene, this.camera);
-        this.renderer.setRenderTarget(null);
-        this._fsQuad.render(this.renderer);
       }
     };
 
@@ -716,9 +570,6 @@ export class WorldRenderer {
   dispose() {
     this.stop();
     this._activeScene?.dispose();
-    this._sceneTarget?.dispose();
-    this._celEdgeMat?.dispose();
-    this._fsQuad?.dispose();
     this.renderer.dispose();
   }
 }

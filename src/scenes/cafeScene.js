@@ -13,23 +13,6 @@ import {
 } from '../utils/characterRenderer.js';
 import { store } from '../store/gameStore.js';
 
-// ── 툰 그라디언트 맵 (전역 공유) ─────────────────────────────
-// 4-step: 소프트 카와이 스텝 — 너무 극단적이지 않게
-// shadow(55)→mid-dark(130)→mid-light(200)→highlight(255)
-let _toonGradientMap = null;
-function getToonGradientMap() {
-  if (_toonGradientMap) return _toonGradientMap;
-  // 3-step 셀 셰이딩: 90=그림자(파스텔 중간), 160=미드, 255=하이라이트
-  // 90/255=35% — 앰비언트 1.2와 조합하면 그림자 면도 충분히 밝음
-  const colors = new Uint8Array([90, 160, 255]);
-  const tex = new THREE.DataTexture(colors, 3, 1, THREE.RedFormat);
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  _toonGradientMap = tex;
-  return tex;
-}
-
 // ── 타일 월드 상수 ─────────────────────────────────────────
 const TILE_SIZE   = 10;   // 타일 하나의 월드 크기
 const GRID_DIM    = 5;    // 5×5 그리드
@@ -83,16 +66,12 @@ const C = {
   bookD:         0xB5EAD7,
 };
 
-// ── 재질 캐시 (MeshToonMaterial) ───────────────────────────
+// ── 재질 캐시 (MeshLambertMaterial) ────────────────────────
 const _matCache = new Map();
 function mat(color, opts = {}) {
   const key = `${color}_${JSON.stringify(opts)}`;
   if (!_matCache.has(key)) {
-    _matCache.set(key, new THREE.MeshToonMaterial({
-      color,
-      gradientMap: getToonGradientMap(),
-      ...opts,
-    }));
+    _matCache.set(key, new THREE.MeshLambertMaterial({ color, ...opts }));
   }
   return _matCache.get(key);
 }
@@ -133,15 +112,9 @@ export class CafeScene {
     this._buildIslandCounter();
     this._buildTileGrid();
 
-    // 프러스텀 컬링 비활성화 + 모든 MeshToonMaterial에 그라디언트맵 재적용
-    const gm = getToonGradientMap();
+    // 프러스텀 컬링 비활성화
     this.scene.traverse(obj => {
-      if (!obj.isMesh) return;
-      obj.frustumCulled = false;
-      if (obj.material?.isMeshToonMaterial) {
-        obj.material.gradientMap = gm;
-        obj.material.needsUpdate = true;
-      }
+      if (obj.isMesh) obj.frustumCulled = false;
     });
   }
 
@@ -149,8 +122,6 @@ export class CafeScene {
   get gridSpan()   { return GRID_SPAN; }  // 카메라 토로이달 랩핑에 사용
 
   // ── 조명 ─────────────────────────────────────────────────
-  // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
-  // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
     // ── 기존 라이트 전체 제거 (이전 이터레이션 누적 방지) ──────
     this.scene.children
@@ -317,7 +288,7 @@ export class CafeScene {
     this.scene.add(frame);
     const sign = new THREE.Mesh(
       new THREE.BoxGeometry(3.0, 0.70, 0.10),
-      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
+      new THREE.MeshLambertMaterial({ map: tex })
     );
     sign.position.set(x, y, z + 0.02);
     this.scene.add(sign);
@@ -348,7 +319,7 @@ export class CafeScene {
     this.scene.add(frame);
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(1.38, 0.90, 0.08),
-      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
+      new THREE.MeshLambertMaterial({ map: tex })
     );
     board.position.set(x, y, z + 0.02);
     this.scene.add(board);
@@ -399,29 +370,24 @@ export class CafeScene {
     loader.load(modelPath, (gltf) => {
       const model = gltf.scene;
 
-      // GLB 머테리얼 → MeshToonMaterial로 교체 (카툰 렌더링 통일)
+      // GLB 머테리얼 → MeshLambertMaterial (파스텔 민트)
       model.traverse(child => {
         if (!child.isMesh || !child.material) return;
         const mats = Array.isArray(child.material) ? child.material : [child.material];
         const newMats = mats.map(m => {
-          // GRID 머테리얼 → 커피머신 배수 그레이팅 텍스처
           if (m.name && /grid/i.test(m.name)) {
-            return new THREE.MeshToonMaterial({
-              color: new THREE.Color(0xA87830),
+            return new THREE.MeshLambertMaterial({
+              color: new THREE.Color(0xA8C8B8),
               map: this._getDrainGridTexture(),
-              gradientMap: getToonGradientMap(),
             });
           }
-
           const hsl = { h: 0, s: 0, l: 0 };
           (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
-
           let color;
-          if (hsl.l > 0.65)       color = new THREE.Color(0xD8F0E8);  // 라이트 민트 (하이라이트)
-          else if (hsl.l > 0.35)  color = new THREE.Color(0xA8D8C8);  // 파스텔 민트 (미드)
-          else                    color = new THREE.Color(0x7DBFAA);  // 미디엄 민트 (섀도)
-
-          return new THREE.MeshToonMaterial({ color, gradientMap: getToonGradientMap() });
+          if (hsl.l > 0.65)       color = new THREE.Color(0xD8F0E8);
+          else if (hsl.l > 0.35)  color = new THREE.Color(0xA8D8C8);
+          else                    color = new THREE.Color(0x7DBFAA);
+          return new THREE.MeshLambertMaterial({ color });
         });
         child.material = Array.isArray(child.material) ? newMats : newMats[0];
       });
@@ -694,10 +660,7 @@ export class CafeScene {
     // 전구 (갓 안쪽 따뜻한 글로우)
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.048, 7, 6),
-      new THREE.MeshToonMaterial({
-        color: C.lampBulb, emissive: 0xFFE890, emissiveIntensity: 3.5,
-        gradientMap: getToonGradientMap(),
-      })
+      new THREE.MeshBasicMaterial({ color: 0xFFF8C0 })
     );
     bulb.position.set(localX, baseY - 0.01, localZ);
     group.add(bulb);
@@ -794,10 +757,7 @@ export class CafeScene {
     // 발광 화면
     const glow = new THREE.Mesh(
       new THREE.PlaneGeometry(0.22, 0.15),
-      new THREE.MeshToonMaterial({
-        color: 0xF0F4FF, emissive: 0xC8D8FF, emissiveIntensity: 1.8,
-        gradientMap: getToonGradientMap(), side: THREE.DoubleSide,
-      })
+      new THREE.MeshBasicMaterial({ color: 0xDCE8FF, side: THREE.DoubleSide })
     );
     glow.position.set(lx, ly + 0.106, lz - 0.057);
     glow.rotation.x = scrAngle;
@@ -817,10 +777,7 @@ export class CafeScene {
       const col = bulbColors[i % bulbColors.length];
       const bulb = new THREE.Mesh(
         new THREE.SphereGeometry(0.040, 6, 4),
-        new THREE.MeshToonMaterial({
-          color: col, emissive: col, emissiveIntensity: 2.0,
-          gradientMap: getToonGradientMap(),
-        })
+        new THREE.MeshBasicMaterial({ color: col })
       );
       bulb.position.set(x, Y - sag, zOffset);
       group.add(bulb);
