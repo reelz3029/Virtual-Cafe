@@ -9,10 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { ShaderPass }     from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { OutputPass }     from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { store, setSeat, showNotification } from '../store/gameStore.js';
 import { CafeScene }       from '../scenes/cafeScene.js';
 import { multiplayerSim }  from './multiplayerSim.js';
@@ -117,8 +114,8 @@ export class WorldRenderer {
     this._hoveredTableId  = null;
     this._tableTooltipEl  = this._createTableTooltip();
 
+    this._initCamera();    // RenderPass 생성 전에 camera가 존재해야 함
     this._initRenderer();
-    this._initCamera();
     this._bindEvents();
   }
 
@@ -190,7 +187,7 @@ export class WorldRenderer {
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: false,          // 렌더타겟 출력 시 antialias는 OutputPass에서 처리
+      antialias: false,
       alpha: false,
       powerPreference: 'high-performance',
     });
@@ -199,28 +196,33 @@ export class WorldRenderer {
     this.renderer.setClearColor(0xF0E8D4, 1);
     this.renderer.shadowMap.enabled = false;
 
-    // ── EffectComposer 셋업 ──────────────────────────────────
-    // 깊이 텍스처 포함 렌더타겟 — CelEdge 셰이더에서 tDepth로 참조
-    this._renderTarget = new THREE.WebGLRenderTarget(W, H, {
+    // ── Post-process 셋업 (EffectComposer 미사용) ────────────
+    // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
+    // 대신: 씬 → _sceneTarget(color+depth) → FullScreenQuad(CelEdge) → screen
+    // _sceneTarget은 쓰기 후 읽기만 하므로 Feedback loop 절대 없음
+    this._sceneTarget = new THREE.WebGLRenderTarget(W, H, {
       depthTexture: new THREE.DepthTexture(W, H, THREE.UnsignedShortType),
       depthBuffer: true,
       stencilBuffer: false,
     });
 
-    this.composer = new EffectComposer(this.renderer, this._renderTarget);
+    this._celEdgeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse:    { value: this._sceneTarget.texture },
+        tDepth:      { value: this._sceneTarget.depthTexture },
+        uResolution: { value: new THREE.Vector2(W, H) },
+        uEdgeColor:  { value: new THREE.Color(0x1a0e04) },
+        uDepthSens:  { value: 260.0 },
+        uColorSens:  { value: 3.5 },
+        uThickness:  { value: 1.4 },
+      },
+      vertexShader:   CelEdgeShader.vertexShader,
+      fragmentShader: CelEdgeShader.fragmentShader,
+      depthTest:  false,
+      depthWrite: false,
+    });
 
-    // Pass 1: 씬 렌더 (color + depth 동시 기록)
-    this.renderPass = new RenderPass(new THREE.Scene(), this.camera);
-    this.composer.addPass(this.renderPass);
-
-    // Pass 2: Cel 윤곽선 검출 (풀스크린 셰이더, 드로우콜 1개)
-    this.celEdgePass = new ShaderPass(CelEdgeShader);
-    this.celEdgePass.uniforms['tDepth'].value      = this._renderTarget.depthTexture;
-    this.celEdgePass.uniforms['uResolution'].value.set(W, H);
-    this.composer.addPass(this.celEdgePass);
-
-    // Pass 3: 감마 보정 출력
-    this.composer.addPass(new OutputPass());
+    this._fsQuad = new FullScreenQuad(this._celEdgeMat);
   }
 
   _initCamera() {
@@ -485,9 +487,8 @@ export class WorldRenderer {
   _onResize() {
     const W = window.innerWidth, H = window.innerHeight;
     this.renderer.setSize(W, H);
-    this._renderTarget.setSize(W, H);
-    this.composer.setSize(W, H);
-    this.celEdgePass.uniforms['uResolution'].value.set(W, H);
+    this._sceneTarget.setSize(W, H);
+    this._celEdgeMat.uniforms['uResolution'].value.set(W, H);
     this._updateCameraFrustum();
   }
 
@@ -642,10 +643,12 @@ export class WorldRenderer {
       // 씬 update (스프라이트 float 등)
       this._activeScene?.update(this.camera, delta);
 
-      // 렌더 (EffectComposer: RenderPass → CelEdge → OutputPass)
+      // 렌더: 씬 → _sceneTarget(color+depth) → FullScreenQuad CelEdge → screen
       if (this._activeScene) {
-        this.renderPass.scene = this._activeScene.scene;
-        this.composer.render(delta);
+        this.renderer.setRenderTarget(this._sceneTarget);
+        this.renderer.render(this._activeScene.scene, this.camera);
+        this.renderer.setRenderTarget(null);
+        this._fsQuad.render(this.renderer);
       }
     };
 
@@ -662,8 +665,9 @@ export class WorldRenderer {
   dispose() {
     this.stop();
     this._activeScene?.dispose();
-    this._renderTarget?.dispose();
-    this.composer?.dispose();
+    this._sceneTarget?.dispose();
+    this._celEdgeMat?.dispose();
+    this._fsQuad?.dispose();
     this.renderer.dispose();
   }
 }

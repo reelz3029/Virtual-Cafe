@@ -74,23 +74,28 @@ class PresenceManager {
     this._myRef = ref(this._db, `presence/${scene}/${this._sid}`);
 
     // Firebase 연결 상태 모니터링
+    // .info/connected 는 초기화 시 항상 false를 먼저 방출하므로
+    // "연결됨"을 한 번이라도 확인한 뒤에만 끊김 판정
+    let hasConnected = false;
+    const noConnTimer = setTimeout(() => {
+      if (!hasConnected) {
+        console.warn('[Presence] Firebase 연결 타임아웃 — databaseURL:', FIREBASE_CONFIG.databaseURL);
+        showNotification('Firebase 연결 실패 — Realtime Database URL 또는 보안 규칙을 확인하세요.', 'info');
+      }
+    }, 8_000); // 8초 안에 연결 안되면 실패로 간주
+
     const connRef = ref(this._db, '.info/connected');
     const connUnsub = onValue(connRef, snap => {
       if (snap.val() === true) {
+        hasConnected = true;
+        clearTimeout(noConnTimer);
         console.log('[Presence] Firebase 연결됨');
-      } else {
-        console.warn(
-          '[Presence] Firebase 미연결 — databaseURL을 확인하세요:',
-          FIREBASE_CONFIG.databaseURL,
-        );
-        showNotification(
-          'Firebase 연결 실패 — Realtime Database URL 또는 보안 규칙을 확인하세요.',
-          'info',
-        );
+      } else if (hasConnected) {
+        // 한번 연결된 뒤 끊긴 경우만 경고 (초기 false는 무시)
+        console.warn('[Presence] Firebase 연결 끊김');
       }
     });
-    // 연결 감시는 최초 1회만 사용하고 해제
-    setTimeout(() => connUnsub(), 10_000);
+    setTimeout(() => connUnsub(), 15_000);
 
     // onDisconnect 먼저 등록 (네트워크 단절/크래시 시 서버에서 자동 삭제)
     onDisconnect(this._myRef).remove();
