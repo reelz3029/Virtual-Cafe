@@ -13,6 +13,22 @@ import {
 } from '../utils/characterRenderer.js';
 import { store } from '../store/gameStore.js';
 
+// ── 툰 그라디언트 맵 (전역 공유) ─────────────────────────────
+// 4-step: shadow(128)→mid(175)→light(220)→highlight(255)
+// 최소값 128(50%)로 밝은 분위기 유지
+let _toonGradientMap = null;
+function getToonGradientMap() {
+  if (_toonGradientMap) return _toonGradientMap;
+  const colors = new Uint8Array([128, 175, 220, 255]);
+  const tex = new THREE.DataTexture(colors, 4, 1);
+  tex.format = THREE.RedFormat;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  _toonGradientMap = tex;
+  return tex;
+}
+
 // ── 타일 월드 상수 ─────────────────────────────────────────
 const TILE_SIZE   = 10;   // 타일 하나의 월드 크기
 const GRID_DIM    = 5;    // 5×5 그리드
@@ -51,12 +67,16 @@ const C = {
   rug2:          0xC06030,
 };
 
-// ── 재질 캐시 ──────────────────────────────────────────────
+// ── 재질 캐시 (MeshToonMaterial) ───────────────────────────
 const _matCache = new Map();
 function mat(color, opts = {}) {
   const key = `${color}_${JSON.stringify(opts)}`;
   if (!_matCache.has(key)) {
-    _matCache.set(key, new THREE.MeshLambertMaterial({ color, ...opts }));
+    _matCache.set(key, new THREE.MeshToonMaterial({
+      color,
+      gradientMap: getToonGradientMap(),
+      ...opts,
+    }));
   }
   return _matCache.get(key);
 }
@@ -156,7 +176,7 @@ export class CafeScene {
 
     const floorMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1200, 1200),
-      new THREE.MeshLambertMaterial({ map: tex })
+      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
     );
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.y = 0;
@@ -257,7 +277,7 @@ export class CafeScene {
     this.scene.add(frame);
     const sign = new THREE.Mesh(
       new THREE.BoxGeometry(3.0, 0.70, 0.10),
-      new THREE.MeshLambertMaterial({ map: tex })
+      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
     );
     sign.position.set(x, y, z + 0.02);
     this.scene.add(sign);
@@ -285,7 +305,7 @@ export class CafeScene {
     this.scene.add(frame);
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(1.38, 0.90, 0.08),
-      new THREE.MeshLambertMaterial({ map: tex })
+      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
     );
     board.position.set(x, y, z + 0.02);
     this.scene.add(board);
@@ -336,34 +356,31 @@ export class CafeScene {
     loader.load(modelPath, (gltf) => {
       const model = gltf.scene;
 
-      // 카페 분위기에 맞는 팔레트로 머테리얼 재매핑
+      // GLB 머테리얼 → MeshToonMaterial로 교체 (카툰 렌더링 통일)
       model.traverse(child => {
         if (!child.isMesh || !child.material) return;
         const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach(m => {
+        const newMats = mats.map(m => {
           // GRID 머테리얼 → 커피머신 배수 그레이팅 텍스처
           if (m.name && /grid/i.test(m.name)) {
-            m.color = new THREE.Color(0xA87830);
-            m.map = this._getDrainGridTexture();
-            if (m.metalness !== undefined) { m.metalness = 0.75; m.roughness = 0.30; }
-            m.needsUpdate = true;
-            return;
+            return new THREE.MeshToonMaterial({
+              color: new THREE.Color(0xA87830),
+              map: this._getDrainGridTexture(),
+              gradientMap: getToonGradientMap(),
+            });
           }
 
           const hsl = { h: 0, s: 0, l: 0 };
           (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
 
-          if (hsl.l > 0.65) {
-            m.color = new THREE.Color(0xE8D4A8);
-          } else if (hsl.l > 0.35) {
-            m.color = new THREE.Color(0x7A5020);
-            if (m.metalness !== undefined) { m.metalness = 0.55; m.roughness = 0.45; }
-          } else {
-            m.color = new THREE.Color(0x1E1008);
-            if (m.metalness !== undefined) { m.metalness = 0.35; m.roughness = 0.60; }
-          }
-          m.needsUpdate = true;
+          let color;
+          if (hsl.l > 0.65)       color = new THREE.Color(0xE8D4A8);
+          else if (hsl.l > 0.35)  color = new THREE.Color(0x7A5020);
+          else                    color = new THREE.Color(0x1E1008);
+
+          return new THREE.MeshToonMaterial({ color, gradientMap: getToonGradientMap() });
         });
+        child.material = Array.isArray(child.material) ? newMats : newMats[0];
       });
 
       // 타겟 높이에 맞춰 스케일 자동 조정
@@ -600,8 +617,9 @@ export class CafeScene {
 
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.082, 8, 8),
-      new THREE.MeshLambertMaterial({
-        color: C.lampBulb, emissive: 0xFFD040, emissiveIntensity: 0.6,
+      new THREE.MeshToonMaterial({
+        color: C.lampBulb, emissive: 0xFFD040, emissiveIntensity: 0.8,
+        gradientMap: getToonGradientMap(),
       })
     );
     bulb.position.set(localX, ceilY - cordLen - 0.12, localZ);
@@ -831,6 +849,8 @@ export class CafeScene {
       );
       glow.rotation.x = -Math.PI / 2;
       glow.position.y = 0.01;
+      // OutlineEffect: 반투명 글로우에 아웃라인 그리지 않음
+      glow.userData.outlineParameters = { visible: false };
       group.add(glow);
     }
 

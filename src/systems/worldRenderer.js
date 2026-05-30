@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { store, setSeat, showNotification } from '../store/gameStore.js';
 import { CafeScene } from '../scenes/cafeScene.js';
 import { multiplayerSim } from './multiplayerSim.js';
@@ -28,7 +29,7 @@ export class WorldRenderer {
       zoom:      6,
       targetZoom: 6,  // smooth lerp 목표값
       minZoom:   3,
-      maxZoom:   14,
+      maxZoom:   10,
       isDragging: false,
       dragStart: { x: 0, y: 0 },   // 드래그 시작점 (클릭 구분용)
       lastMouse: { x: 0, y: 0 },
@@ -120,7 +121,7 @@ export class WorldRenderer {
   _initRenderer() {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: window.devicePixelRatio < 2, // 고해상도에선 antialias 끄기
+      antialias: window.devicePixelRatio < 2,
       alpha: false,
       powerPreference: 'high-performance',
     });
@@ -128,6 +129,14 @@ export class WorldRenderer {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0xF0E8D4, 1);
     this.renderer.shadowMap.enabled = false;
+
+    // 카툰 렌더링: 모든 메시 외곽선 자동 추가
+    // defaultThickness: 월드 유닛 기준 선 두께 (아이소메트릭 zoom 6 기준 적합)
+    this.outlineEffect = new OutlineEffect(this.renderer, {
+      defaultThickness: 0.0022,
+      defaultColor: new THREE.Color(0x1a0e04), // 따뜻한 다크 브라운 아웃라인
+      defaultAlpha: 0.85,
+    });
   }
 
   _initCamera() {
@@ -545,9 +554,9 @@ export class WorldRenderer {
       // 씬 update (스프라이트 float 등)
       this._activeScene?.update(this.camera, delta);
 
-      // 렌더
+      // 렌더 (OutlineEffect → 카툰 외곽선 자동 적용)
       if (this._activeScene) {
-        this.renderer.render(this._activeScene.scene, this.camera);
+        this.outlineEffect.render(this._activeScene.scene, this.camera);
       }
     };
 
@@ -565,5 +574,6 @@ export class WorldRenderer {
     this.stop();
     this._activeScene?.dispose();
     this.renderer.dispose();
+    this.outlineEffect = null;
   }
 }
