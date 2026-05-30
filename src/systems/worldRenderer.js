@@ -133,8 +133,9 @@ export class WorldRenderer {
   _initCamera() {
     const aspect = window.innerWidth / window.innerHeight;
     const h = this._cam.zoom;
+    // near를 음수로 설정 — OrthographicCamera는 카메라 뒤쪽도 렌더 가능
     this.camera = new THREE.OrthographicCamera(
-      -h * aspect, h * aspect, h, -h, 0.1, 100
+      -h * aspect, h * aspect, h, -h, -80, 200
     );
     this.camera.position.set(9, 9, 9);
     this.camera.lookAt(0, 0, 0);
@@ -149,7 +150,7 @@ export class WorldRenderer {
     this.canvas.addEventListener('touchstart', e => this._onTouchStart(e), { passive: true });
     window.addEventListener('touchmove',       e => this._onTouchMove(e),  { passive: true });
     window.addEventListener('touchend',        e => this._onMouseUp(e));
-    this.canvas.addEventListener('wheel',      e => this._onWheel(e), { passive: true });
+    window.addEventListener('wheel',           e => this._onWheel(e), { passive: true });
     window.addEventListener('resize',          () => this._onResize());
     document.addEventListener('mouseleave',    () => this._hideTableTooltip());
 
@@ -419,6 +420,10 @@ export class WorldRenderer {
     this.camera.right  =  w;
     this.camera.top    =  h;
     this.camera.bottom = -h;
+    // near/far를 zoom에 비례해 함께 갱신 — 줌 아웃 시 컬링 범위 확장
+    // near 음수: 아이소메트릭 카메라 하단부 바닥이 뷰 뒤쪽에 위치하는 현상 대응
+    this.camera.near = -h * 12;
+    this.camera.far  =  h * 25;
     this.camera.updateProjectionMatrix();
   }
 
