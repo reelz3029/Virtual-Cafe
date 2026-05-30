@@ -25,17 +25,17 @@ const CelEdgeShader = {
     tDiffuse:      { value: null },
     tDepth:        { value: null },
     uResolution:   { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:    { value: new THREE.Color(0xE0B0CC) },
-    uDepthSens:    { value: 100.0 },
-    uColorSens:    { value: 1.4 },
-    uThickness:    { value: 0.9 },
-    uDuoShadow:    { value: new THREE.Color(0xEEDEFF) },
-    uDuoHighlight: { value: new THREE.Color(0xFFFBF0) },
-    uDuoStrength:  { value: 0.18 },
-    uSatBoost:     { value: 1.20 },
-    uVignette:      { value: 0.10 },
-    uBloomStrength: { value: 0.35 },
-    uExposure:      { value: 1.08 },
+    uEdgeColor:    { value: new THREE.Color(0x3D1C2E) },  // 다크 퍼플-브라운 아웃라인
+    uDepthSens:    { value: 220.0 },  // 강한 실루엣 엣지
+    uColorSens:    { value: 3.5  },   // 강한 색상 경계
+    uThickness:    { value: 1.4  },
+    uDuoShadow:    { value: new THREE.Color(0xFFE4E8) },
+    uDuoHighlight: { value: new THREE.Color(0xFFFBF5) },
+    uDuoStrength:  { value: 0.0  },   // 듀오톤 OFF — 재질 색상 그대로
+    uSatBoost:     { value: 1.0  },   // 채도 보정 없음 (재질이 직접 색 담당)
+    uVignette:      { value: 0.08 },
+    uBloomStrength: { value: 0.22 },  // 램프 글로우만
+    uExposure:      { value: 1.0  },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -235,7 +235,7 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0xEEE4FF, 1);   // 라이트 라벤더 배경
+    this.renderer.setClearColor(0xFFE8D6, 1);   // 웜 아프리콧 배경
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.BasicShadowMap;  // 가장 빠른 그림자
 
@@ -254,17 +254,17 @@ export class WorldRenderer {
         tDiffuse:      { value: this._sceneTarget.texture },
         tDepth:        { value: this._sceneTarget.depthTexture },
         uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0xE0B0CC) },
-        uDepthSens:    { value: 100.0 },
-        uColorSens:    { value: 1.4 },
-        uThickness:    { value: 0.9 },
-        uDuoShadow:    { value: new THREE.Color(0xEEDEFF) },
-        uDuoHighlight: { value: new THREE.Color(0xFFFBF0) },
-        uDuoStrength:  { value: 0.18 },
-        uSatBoost:     { value: 1.20 },
-        uVignette:     { value: 0.10 },
-        uBloomStrength:{ value: 0.35 },
-        uExposure:     { value: 1.08 },
+        uEdgeColor:    { value: new THREE.Color(0x3D1C2E) },
+        uDepthSens:    { value: 220.0 },
+        uColorSens:    { value: 3.5  },
+        uThickness:    { value: 1.4  },
+        uDuoShadow:    { value: new THREE.Color(0xFFE4E8) },
+        uDuoHighlight: { value: new THREE.Color(0xFFFBF5) },
+        uDuoStrength:  { value: 0.0  },
+        uSatBoost:     { value: 1.0  },
+        uVignette:     { value: 0.08 },
+        uBloomStrength:{ value: 0.22 },
+        uExposure:     { value: 1.0  },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
