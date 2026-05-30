@@ -205,9 +205,8 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0x0d1620, 1);   // 짙은 네이비 배경
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    this.renderer.setClearColor(0x140608, 1);   // 짙은 크림슨 배경
+    this.renderer.shadowMap.enabled = false;    // 성능 우선: 그림자맵 비활성화
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
     // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
@@ -224,13 +223,13 @@ export class WorldRenderer {
         tDiffuse:      { value: this._sceneTarget.texture },
         tDepth:        { value: this._sceneTarget.depthTexture },
         uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0x080e18) },
-        uDepthSens:    { value: 220.0 },
-        uColorSens:    { value: 2.8 },
-        uThickness:    { value: 1.2 },
-        uDuoShadow:    { value: new THREE.Color(0x0c1622) },
-        uDuoHighlight: { value: new THREE.Color(0xe8dfc0) },
-        uDuoStrength:  { value: 0.88 },
+        uEdgeColor:    { value: new THREE.Color(0x0a0305) },  // 따뜻한 거의-검정
+        uDepthSens:    { value: 200.0 },
+        uColorSens:    { value: 2.6 },
+        uThickness:    { value: 1.3 },
+        uDuoShadow:    { value: new THREE.Color(0x1a0810) },  // 짙은 크림슨
+        uDuoHighlight: { value: new THREE.Color(0xffd0a0) },  // 따뜻한 피치/크림
+        uDuoStrength:  { value: 0.82 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
@@ -649,15 +648,6 @@ export class WorldRenderer {
 
       // 무한 타일 랩핑 — 카메라 위치 기준으로 타일 재배치
       this._activeScene?.updateTiles(this._cam.target);
-
-      // 태양광 + 그림자 카메라를 카메라 타겟 추종
-      // 무한 월드에서 어디서든 그림자가 정확하게 떨어지도록
-      if (this._activeScene?.sunLight) {
-        const t = this._cam.target;
-        this._activeScene.sunLight.position.set(t.x + 9, 14, t.z + 9);
-        this._activeScene.sunLight.target.position.set(t.x, 0, t.z);
-        this._activeScene.sunLight.target.updateMatrixWorld();
-      }
 
       // 캐릭터 diff 업데이트 (600ms마다) — 변경 없으면 즉시 리턴
       if (now - lastCharUpdate > 600) {

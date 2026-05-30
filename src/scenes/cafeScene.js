@@ -14,13 +14,12 @@ import {
 import { store } from '../store/gameStore.js';
 
 // ── 툰 그라디언트 맵 (전역 공유) ─────────────────────────────
-// 3-step 고대비: shadow(25)→mid(140)→highlight(255)
-// 레퍼런스 스타일: 어두운 그림자 영역 / 밝은 하이라이트 영역 명확히 구분
-// 실제 색감은 CelEdge 듀오톤 셰이더가 네이비/크림으로 매핑
+// 3-step: shadow(50)→mid(160)→highlight(255)
+// 따뜻한 실내조명 분위기: 그림자가 너무 어둡지 않도록 50에서 시작
 let _toonGradientMap = null;
 function getToonGradientMap() {
   if (_toonGradientMap) return _toonGradientMap;
-  const colors = new Uint8Array([25, 140, 255]);
+  const colors = new Uint8Array([50, 160, 255]);
   const tex = new THREE.DataTexture(colors, 3, 1);
   tex.format = THREE.RedFormat;
   tex.minFilter = THREE.NearestFilter;
@@ -41,33 +40,34 @@ const SEATS_PER_TABLE = 4;
 const TABLE_R         = 0.52;   // 테이블 반경 (0.42 → 0.52)
 const SEAT_DIST       = 0.82;   // 의자-테이블 거리 (0.65 → 0.82)
 
-// ── 탈색 크림/스톤 팔레트 ────────────────────────────────────
-// 듀오톤 셰이더가 밝기에 따라 네이비↔크림으로 매핑하므로
-// 모든 소재를 비슷한 밝기의 중성 색상으로 통일
+// ── 따뜻한 테라코타/레드 팔레트 ─────────────────────────────
+// 듀오톤: shadow=#1a0810(크림슨) ↔ highlight=#ffd0a0(피치크림)
+// 밝기 차이로 다층 톤 구현:
+//   밝은 소재(lum>0.6) → 피치/크림 / 중간(0.3~0.6) → 테라코타 / 어두운(lum<0.3) → 크림슨
 const C = {
-  grout:         0xD0CCC4,
-  wall:          0xE4E0D8,
-  wallBase:      0xD4D0C8,
-  counterTop:    0xDEDAD2,
-  counterFront:  0xD0CCC4,
-  counterSide:   0xC8C4BC,
-  tableTop:      0xDEDAD2,
-  tableLeg:      0xC4C0B8,
-  chairWood:     0xC4C0B8,
-  chairPad:      0xE0DCD4,
-  windowGlass:   0xCCD4DC,
-  lampCord:      0x303030,
-  lampBulb:      0xFFF8E0,   // 전구: 따뜻한 emissive 유지
-  lampSocket:    0x787068,
-  leaf1:         0xC0C4B8,   // 약간 녹색빛 회색
-  leaf2:         0xB0B4A8,
-  pot:           0xC8C4BC,
-  shelfWood:     0xBEBAB2,
-  signDark:      0x181818,
-  coffeeMachine: 0x9898A0,
-  pole:          0x3A3830,
-  rug1:          0xBCB8B0,
-  rug2:          0xCCCCC4,
+  grout:         0xA04828,  // 중간 테라코타
+  wall:          0xC87860,  // 연한 살몬
+  wallBase:      0xA05838,  // 중간 테라코타
+  counterTop:    0xF0C8A0,  // 밝은 베이지 → 피치크림
+  counterFront:  0x6A2818,  // 짙은 레드브라운 → 크림슨
+  counterSide:   0x5A2010,  // 더 짙은
+  tableTop:      0xC87060,  // 중간 살몬
+  tableLeg:      0x5A1808,  // 짙은 레드 → 크림슨
+  chairWood:     0x5A1808,
+  chairPad:      0xE8B898,  // 밝은 피치 → 피치크림
+  windowGlass:   0x7088A0,  // 쿨 블루-그레이 (창문)
+  lampCord:      0x180808,  // 거의 검정
+  lampBulb:      0xFFE898,  // 따뜻한 emissive 유지
+  lampSocket:    0x3A1010,  // 짙은 레드
+  leaf1:         0x487038,  // 중간 그린 → 듀오톤에서 따뜻한 갈색으로
+  leaf2:         0x304820,
+  pot:           0xA04830,  // 중간 테라코타
+  shelfWood:     0x7A3818,  // 짙은 레드브라운
+  signDark:      0x180808,
+  coffeeMachine: 0xA06050,  // 중간 살몬-브라운
+  pole:          0x200808,  // 거의 검정 레드
+  rug1:          0x882010,  // 짙은 레드
+  rug2:          0xB04030,  // 중간 레드
 };
 
 // ── 재질 캐시 (MeshToonMaterial) ───────────────────────────
@@ -131,33 +131,29 @@ export class CafeScene {
   get gridSpan()   { return GRID_SPAN; }  // 카메라 토로이달 랩핑에 사용
 
   // ── 조명 ─────────────────────────────────────────────────
-  // 레퍼런스 스타일: 단방향 강한 주광 + 극히 낮은 앰비언트 → 선명한 그림자
+  // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
+  // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
-    // 배경색: 짙은 네이비 (씬 전체 분위기 설정)
-    this.scene.background = new THREE.Color(0x0d1620);
+    // 배경: 짙은 크림슨/마룬
+    this.scene.background = new THREE.Color(0x140608);
 
-    // 앰비언트: 매우 낮은 쿨 블루 → 그림자 영역이 진한 네이비로 보임
-    this.scene.add(new THREE.AmbientLight(0x0a1828, 0.35));
+    // 앰비언트: 따뜻한 어두운 레드 → 그림자 영역에 크림슨 틴트
+    this.scene.add(new THREE.AmbientLight(0x3A1008, 0.45));
 
-    // 메인 태양광 — 좌상단에서 강하게, 그림자 활성화
-    this.sunLight = new THREE.DirectionalLight(0xfff0e0, 2.2);
-    this.sunLight.position.set(9, 14, 9);
-    this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(2048, 2048);
-    this.sunLight.shadow.camera.near   = 0.5;
-    this.sunLight.shadow.camera.far    = 80;
-    this.sunLight.shadow.camera.left   = -22;
-    this.sunLight.shadow.camera.right  =  22;
-    this.sunLight.shadow.camera.top    =  22;
-    this.sunLight.shadow.camera.bottom = -22;
-    this.sunLight.shadow.bias          = -0.001;
-    this.scene.add(this.sunLight);
-    this.scene.add(this.sunLight.target);
+    // 메인 주광: 아이소메트릭 좌상단에서 따뜻하게
+    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.9);
+    sun.position.set(9, 14, 9);
+    this.scene.add(sun);
 
-    // 약한 보조광 (완전 암흑 방지, 매우 낮게)
-    const fill = new THREE.DirectionalLight(0x102040, 0.15);
-    fill.position.set(-5, 8, -5);
+    // 보조 반사광: 반대편 약한 따뜻한 보조
+    const fill = new THREE.DirectionalLight(0xFF9060, 0.20);
+    fill.position.set(-5, 6, -5);
     this.scene.add(fill);
+
+    // 카운터 포인트 라이트: 따뜻한 주황 — 실내 조명 느낌
+    const cl = new THREE.PointLight(0xFF7030, 1.6, 14);
+    cl.position.set(0, 3.8, 0);
+    this.scene.add(cl);
   }
 
   // ── 무한 바닥 (대형 평면 + 시임리스 벽돌 텍스처) ───────────
@@ -195,7 +191,6 @@ export class CafeScene {
     );
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.y = 0;
-    floorMesh.receiveShadow = true;
     this.scene.add(floorMesh);
   }
 
@@ -215,8 +210,6 @@ export class CafeScene {
     panels.forEach(({ w, d, px, pz, color }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, cH, d), mat(color));
       m.position.set(px, cH / 2, pz);
-      m.castShadow    = true;
-      m.receiveShadow = true;
       this.scene.add(m);
     });
 
@@ -746,7 +739,6 @@ export class CafeScene {
       new THREE.CylinderGeometry(0.05, 0.07, 0.74, 8), mat(C.tableLeg)
     );
     leg.position.y = 0.37;
-    leg.castShadow = true;
     group.add(leg);
 
     const base = new THREE.Mesh(
@@ -761,8 +753,6 @@ export class CafeScene {
     );
     top.position.y = 0.76;
     top.userData.tableId = tableId;
-    top.castShadow    = true;
-    top.receiveShadow = true;
     group.add(top);
 
     const rim = new THREE.Mesh(
@@ -807,7 +797,6 @@ export class CafeScene {
       new THREE.CylinderGeometry(0.22, 0.20, 0.06, 12), mat(C.chairPad)
     );
     seat.position.y = 0.45;
-    seat.castShadow = true;
     group.add(seat);
 
     const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6), mat(C.chairWood));
