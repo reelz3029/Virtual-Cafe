@@ -14,13 +14,13 @@ import {
 import { store } from '../store/gameStore.js';
 
 // ── 툰 그라디언트 맵 (전역 공유) ─────────────────────────────
-// 3-step: shadow(50)→mid(160)→highlight(255)
-// 따뜻한 실내조명 분위기: 그림자가 너무 어둡지 않도록 50에서 시작
+// 4-step: 소프트 카와이 스텝 — 너무 극단적이지 않게
+// shadow(55)→mid-dark(130)→mid-light(200)→highlight(255)
 let _toonGradientMap = null;
 function getToonGradientMap() {
   if (_toonGradientMap) return _toonGradientMap;
-  const colors = new Uint8Array([50, 160, 255]);
-  const tex = new THREE.DataTexture(colors, 3, 1);
+  const colors = new Uint8Array([55, 130, 200, 255]);
+  const tex = new THREE.DataTexture(colors, 4, 1);
   tex.format = THREE.RedFormat;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
@@ -40,34 +40,33 @@ const SEATS_PER_TABLE = 4;
 const TABLE_R         = 0.52;   // 테이블 반경 (0.42 → 0.52)
 const SEAT_DIST       = 0.82;   // 의자-테이블 거리 (0.65 → 0.82)
 
-// ── 따뜻한 테라코타/레드 팔레트 ─────────────────────────────
-// 듀오톤: shadow=#1a0810(크림슨) ↔ highlight=#ffd0a0(피치크림)
-// 밝기 차이로 다층 톤 구현:
-//   밝은 소재(lum>0.6) → 피치/크림 / 중간(0.3~0.6) → 테라코타 / 어두운(lum<0.3) → 크림슨
+// ── 카와이 핑크+민트 팔레트 ──────────────────────────────────
+// 레퍼런스: 핑크 도미넌트 + 민트 악센트 + 다크 퍼플 배경
+// 소재별 밝기 차이 → 듀오톤 그레이딩으로 핑크↔퍼플 다층 구현
 const C = {
-  grout:         0xA04828,  // 중간 테라코타
-  wall:          0xC87860,  // 연한 살몬
-  wallBase:      0xA05838,  // 중간 테라코타
-  counterTop:    0xF0C8A0,  // 밝은 베이지 → 피치크림
-  counterFront:  0x6A2818,  // 짙은 레드브라운 → 크림슨
-  counterSide:   0x5A2010,  // 더 짙은
-  tableTop:      0xC87060,  // 중간 살몬
-  tableLeg:      0x5A1808,  // 짙은 레드 → 크림슨
-  chairWood:     0x5A1808,
-  chairPad:      0xE8B898,  // 밝은 피치 → 피치크림
-  windowGlass:   0x7088A0,  // 쿨 블루-그레이 (창문)
-  lampCord:      0x180808,  // 거의 검정
-  lampBulb:      0xFFE898,  // 따뜻한 emissive 유지
-  lampSocket:    0x3A1010,  // 짙은 레드
-  leaf1:         0x487038,  // 중간 그린 → 듀오톤에서 따뜻한 갈색으로
-  leaf2:         0x304820,
-  pot:           0xA04830,  // 중간 테라코타
-  shelfWood:     0x7A3818,  // 짙은 레드브라운
-  signDark:      0x180808,
-  coffeeMachine: 0xA06050,  // 중간 살몬-브라운
-  pole:          0x200808,  // 거의 검정 레드
-  rug1:          0x882010,  // 짙은 레드
-  rug2:          0xB04030,  // 중간 레드
+  grout:         0xD87888,  // 로즈 테라코타 (바닥 줄눈)
+  wall:          0xF0A0B0,  // 라이트 핑크 (벽)
+  wallBase:      0xD87890,  // 미디엄 핑크 (벽 하단)
+  counterTop:    0xF8D8D8,  // 매우 연한 핑크-크림 → 하이라이트
+  counterFront:  0xC86880,  // 미디엄 딥 핑크
+  counterSide:   0xB05870,  // 더 깊은 핑크
+  tableTop:      0xE890A0,  // 살몬-핑크
+  tableLeg:      0x8A3858,  // 짙은 퍼플-핑크
+  chairWood:     0x8A3858,
+  chairPad:      0xF8C0D0,  // 라이트 핑크 쿠션
+  windowGlass:   0x90D0C0,  // 민트 그린-블루 (창문 악센트)
+  lampCord:      0x2A1840,  // 거의 검정 퍼플
+  lampBulb:      0xFFE0F0,  // 따뜻한 핑크-화이트 (emissive)
+  lampSocket:    0x6A2860,  // 딥 퍼플
+  leaf1:         0x68C888,  // 브라이트 민트 그린
+  leaf2:         0x48A868,  // 미디엄 민트
+  pot:           0xD890A0,  // 살몬-핑크 화분
+  shelfWood:     0xB87090,  // 미디엄 핑크-브라운
+  signDark:      0x2A1840,  // 거의 검정 퍼플
+  coffeeMachine: 0xC080A0,  // 모브-핑크 커피머신
+  pole:          0x2A1840,  // 거의 검정 퍼플
+  rug1:          0xE8A0C0,  // 핑크 러그
+  rug2:          0xF0B8D0,  // 연한 핑크 러그
 };
 
 // ── 재질 캐시 (MeshToonMaterial) ───────────────────────────
@@ -134,24 +133,24 @@ export class CafeScene {
   // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
   // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
-    // 배경: 짙은 크림슨/마룬
-    this.scene.background = new THREE.Color(0x140608);
+    // 배경: 짙은 퍼플-마룬 (레퍼런스 공통 다크 배경)
+    this.scene.background = new THREE.Color(0x2A1835);
 
-    // 앰비언트: 따뜻한 어두운 레드 → 그림자 영역에 크림슨 틴트
-    this.scene.add(new THREE.AmbientLight(0x3A1008, 0.45));
+    // 앰비언트: 따뜻한 퍼플-핑크 → 그림자 영역에 보라 틴트
+    this.scene.add(new THREE.AmbientLight(0x4A1850, 0.50));
 
-    // 메인 주광: 아이소메트릭 좌상단에서 따뜻하게
-    const sun = new THREE.DirectionalLight(0xFFE8C0, 1.9);
+    // 메인 주광: 따뜻한 핑크-크림, 아이소메트릭 좌상단
+    const sun = new THREE.DirectionalLight(0xFFE8F0, 1.55);
     sun.position.set(9, 14, 9);
     this.scene.add(sun);
 
-    // 보조 반사광: 반대편 약한 따뜻한 보조
-    const fill = new THREE.DirectionalLight(0xFF9060, 0.20);
+    // 보조 반사광: 반대편 쿨한 민트 (살짝 차가운 채움)
+    const fill = new THREE.DirectionalLight(0x80D8C0, 0.16);
     fill.position.set(-5, 6, -5);
     this.scene.add(fill);
 
-    // 카운터 포인트 라이트: 따뜻한 주황 — 실내 조명 느낌
-    const cl = new THREE.PointLight(0xFF7030, 1.6, 14);
+    // 카운터 포인트 라이트: 핑크 글로우 — 카와이 실내 느낌
+    const cl = new THREE.PointLight(0xFF80B0, 1.8, 13);
     cl.position.set(0, 3.8, 0);
     this.scene.add(cl);
   }
@@ -385,9 +384,9 @@ export class CafeScene {
           (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
 
           let color;
-          if (hsl.l > 0.65)       color = new THREE.Color(0xE8D4A8);
-          else if (hsl.l > 0.35)  color = new THREE.Color(0x7A5020);
-          else                    color = new THREE.Color(0x1E1008);
+          if (hsl.l > 0.65)       color = new THREE.Color(0xF8D0D8);  // 라이트 핑크
+          else if (hsl.l > 0.35)  color = new THREE.Color(0xC06080);  // 미디엄 핑크
+          else                    color = new THREE.Color(0x3A1840);  // 딥 퍼플
 
           return new THREE.MeshToonMaterial({ color, gradientMap: getToonGradientMap() });
         });

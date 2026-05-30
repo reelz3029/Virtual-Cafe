@@ -14,23 +14,26 @@ import { store, setSeat, showNotification } from '../store/gameStore.js';
 import { CafeScene }       from '../scenes/cafeScene.js';
 import { multiplayerSim }  from './multiplayerSim.js';
 
-// ── Cel Shading + Duotone Post-Process Shader ────────────────────────────────
-// Pass 1: 색상/깊이 Sobel로 윤곽선 검출
-// Pass 2: 듀오톤 매핑 — luminance 0→shadow색(네이비), 1→highlight색(크림)
-// 레퍼런스 스타일: 탈색된 카툰 + 단방향 조명 그림자
+// ── Cel Shading + Duotone + Vignette Post-Process Shader ─────────────────────
+// 1. 색상/깊이 Sobel → 아웃라인 (얇고 소프트한 다크 퍼플)
+// 2. 듀오톤 매핑 → 카와이 색감 그레이딩 (shadow=짙은퍼플, highlight=핑크크림)
+// 3. 채도 부스트 → 파스텔 일러스트 느낌
+// 4. 비녜트 → 화면 가장자리 자연스러운 어두움, 깊이감
 const CelEdgeShader = {
   name: 'CelEdgeShader',
   uniforms: {
     tDiffuse:      { value: null },
     tDepth:        { value: null },
     uResolution:   { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:    { value: new THREE.Color(0x080e18) },  // 아웃라인: 짙은 네이비
-    uDepthSens:    { value: 220.0 },
-    uColorSens:    { value: 2.8  },
-    uThickness:    { value: 1.2  },
-    uDuoShadow:    { value: new THREE.Color(0x0c1622) },  // 어두운 쿨 네이비
-    uDuoHighlight: { value: new THREE.Color(0xe8dfc0) },  // 따뜻한 크림
-    uDuoStrength:  { value: 0.88 },   // 듀오톤 강도 (0=원본, 1=완전 듀오톤)
+    uEdgeColor:    { value: new THREE.Color(0x251535) },  // 짙은 퍼플 아웃라인
+    uDepthSens:    { value: 175.0 },
+    uColorSens:    { value: 2.2  },
+    uThickness:    { value: 1.1  },
+    uDuoShadow:    { value: new THREE.Color(0x2a0838) },  // 짙은 퍼플-마룬
+    uDuoHighlight: { value: new THREE.Color(0xffe0e8) },  // 따뜻한 핑크-크림
+    uDuoStrength:  { value: 0.38 },  // 부드러운 컬러 그레이딩 (소재 색 유지)
+    uSatBoost:     { value: 1.22 },  // 채도 부스트 (카와이 비비드)
+    uVignette:     { value: 0.30 },  // 비녜트 강도
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -50,6 +53,8 @@ const CelEdgeShader = {
     uniform vec3      uDuoShadow;
     uniform vec3      uDuoHighlight;
     uniform float     uDuoStrength;
+    uniform float     uSatBoost;
+    uniform float     uVignette;
     varying vec2 vUv;
 
     float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -57,7 +62,7 @@ const CelEdgeShader = {
     void main() {
       vec2 px = uThickness / uResolution;
 
-      // ── 색상 Sobel ──────────────────────────────────
+      // ── 색상 Sobel (색 경계 → 아웃라인) ───────────
       vec3 cN = texture2D(tDiffuse, vUv + vec2( 0.0,  px.y)).rgb;
       vec3 cS = texture2D(tDiffuse, vUv + vec2( 0.0, -px.y)).rgb;
       vec3 cE = texture2D(tDiffuse, vUv + vec2( px.x, 0.0 )).rgb;
@@ -66,7 +71,7 @@ const CelEdgeShader = {
       float ly = lum(cN) - lum(cS);
       float colorEdge = sqrt(lx*lx + ly*ly) * uColorSens;
 
-      // ── 깊이 Sobel ──────────────────────────────────
+      // ── 깊이 Sobel (실루엣 → 아웃라인) ────────────
       float dN = texture2D(tDepth, vUv + vec2( 0.0,  px.y)).r;
       float dS = texture2D(tDepth, vUv + vec2( 0.0, -px.y)).r;
       float dE = texture2D(tDepth, vUv + vec2( px.x, 0.0 )).r;
@@ -77,13 +82,21 @@ const CelEdgeShader = {
 
       float edge = clamp(max(colorEdge, depthEdge), 0.0, 1.0);
 
-      // ── 듀오톤 매핑 ─────────────────────────────────
+      // ── 듀오톤 컬러 그레이딩 ───────────────────────
       vec4 base = texture2D(tDiffuse, vUv);
       float l = lum(base.rgb);
-      // 감마 보정: 중간톤 콘트라스트 강화
-      l = pow(l, 0.85);
-      vec3 duotone   = mix(uDuoShadow, uDuoHighlight, l);
-      vec3 finalRgb  = mix(base.rgb, duotone, uDuoStrength);
+      l = pow(l, 0.88);  // 중간톤 약간 밝게
+      vec3 duotone  = mix(uDuoShadow, uDuoHighlight, l);
+      vec3 finalRgb = mix(base.rgb, duotone, uDuoStrength);
+
+      // ── 채도 부스트 (파스텔 비비드) ────────────────
+      float grayL = lum(finalRgb);
+      finalRgb = mix(vec3(grayL), finalRgb, uSatBoost);
+
+      // ── 비녜트 (가장자리 자연스러운 어두움) ────────
+      vec2 vigOff = (vUv - 0.5) * 2.0;
+      float vign = 1.0 - dot(vigOff, vigOff) * uVignette;
+      finalRgb *= clamp(vign, 0.0, 1.0);
 
       gl_FragColor = mix(vec4(finalRgb, 1.0), vec4(uEdgeColor, 1.0), edge);
     }
@@ -205,7 +218,7 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0x140608, 1);   // 짙은 크림슨 배경
+    this.renderer.setClearColor(0x2A1835, 1);   // 짙은 퍼플 배경
     this.renderer.shadowMap.enabled = false;    // 성능 우선: 그림자맵 비활성화
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
@@ -223,13 +236,15 @@ export class WorldRenderer {
         tDiffuse:      { value: this._sceneTarget.texture },
         tDepth:        { value: this._sceneTarget.depthTexture },
         uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0x0a0305) },  // 따뜻한 거의-검정
-        uDepthSens:    { value: 200.0 },
-        uColorSens:    { value: 2.6 },
-        uThickness:    { value: 1.3 },
-        uDuoShadow:    { value: new THREE.Color(0x1a0810) },  // 짙은 크림슨
-        uDuoHighlight: { value: new THREE.Color(0xffd0a0) },  // 따뜻한 피치/크림
-        uDuoStrength:  { value: 0.82 },
+        uEdgeColor:    { value: new THREE.Color(0x251535) },
+        uDepthSens:    { value: 175.0 },
+        uColorSens:    { value: 2.2 },
+        uThickness:    { value: 1.1 },
+        uDuoShadow:    { value: new THREE.Color(0x2a0838) },
+        uDuoHighlight: { value: new THREE.Color(0xffe0e8) },
+        uDuoStrength:  { value: 0.38 },
+        uSatBoost:     { value: 1.22 },
+        uVignette:     { value: 0.30 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
