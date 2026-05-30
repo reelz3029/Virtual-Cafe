@@ -54,9 +54,9 @@ const C = {
   counterSide:   0xFFCBA4,  // 피치
   // 테이블
   tableTop:      0xFFFAF0,  // 크림 화이트
-  tableLeg:      0xC47A8A,  // 우디 핑크
+  tableLeg:      0x8B5C6A,  // 다크 로즈우드 (대비용)
   // 의자
-  chairWood:     0xC47A8A,  // 우디 핑크
+  chairWood:     0x8B5C6A,  // 다크 로즈우드
   chairPad:      0xFFB7C5,  // 소프트 핑크 (기본, 타일별로 override)
   // 램프
   lampCord:      0xC47A8A,  // 우디 핑크 코드
@@ -147,39 +147,30 @@ export class CafeScene {
   // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
   // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
-    // 웜 아프리콧 배경 (벽/하늘)
+    // 웜 아프리콧 배경
     this.scene.background = new THREE.Color(0xFFE8D6);
 
-    // 분홍 대기 안개 — FogExp2로 부드러운 깊이감
-    this.scene.fog = new THREE.FogExp2(0xFFE8F0, 0.010);
+    // 분홍 대기 안개 — 밀도 낮춤 (너무 진하면 멀리 흐려짐)
+    this.scene.fog = new THREE.FogExp2(0xFFE8F0, 0.006);
 
-    // 앰비언트: 로즈 화이트 0.8 (사양서 그대로)
-    this.scene.add(new THREE.AmbientLight(0xFFE4E1, 0.80));
+    // 앰비언트: 사양서 #FFF0F5 intensity 1.0 — 장면이 항상 밝아야 함
+    this.scene.add(new THREE.AmbientLight(0xFFF0F5, 1.0));
 
-    // 메인 디렉셔널: 크림-핑크 1.2, 45° 탑다운 (사양서 그대로)
+    // 메인 디렉셔널: 그림자맵 OFF (평면 카툰 그림자 사용)
     const sun = new THREE.DirectionalLight(0xFFF0F5, 1.20);
     sun.position.set(9, 14, 9);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(512, 512);
-    sun.shadow.camera.near   =  1;
-    sun.shadow.camera.far    = 50;
-    sun.shadow.camera.left   = -18;
-    sun.shadow.camera.right  =  18;
-    sun.shadow.camera.top    =  18;
-    sun.shadow.camera.bottom = -18;
-    sun.shadow.bias = -0.0008;
     this.scene.add(sun);
 
-    // 카운터 위 따뜻한 골든 포인트 라이트 (사양서: #FFD700, 0.6)
-    const counterL = new THREE.PointLight(0xFFD700, 0.60, 12);
+    // 카운터: 골든 포인트 (사양서 #FFD700, 0.6)
+    const counterL = new THREE.PointLight(0xFFD700, 0.60, 14);
     counterL.position.set(0, 3.8, 0);
     this.scene.add(counterL);
 
-    // 좌/우 민트 필 라이트 (사양서: #B5EAD7, 0.3)
-    const mintL = new THREE.PointLight(0xB5EAD7, 0.30, 22);
+    // 좌/우 민트 필 (사양서 #B5EAD7, 0.3)
+    const mintL = new THREE.PointLight(0xB5EAD7, 0.30, 24);
     mintL.position.set(-9, 4, 0);
     this.scene.add(mintL);
-    const mintR = new THREE.PointLight(0xB5EAD7, 0.30, 22);
+    const mintR = new THREE.PointLight(0xB5EAD7, 0.30, 24);
     mintR.position.set(9, 4, 0);
     this.scene.add(mintR);
   }
@@ -191,17 +182,17 @@ export class CafeScene {
     canvas.width = sz; canvas.height = sz;
     const ctx = canvas.getContext('2d');
 
-    // 아이보리 + 라이트핑크 체커보드 (사양서 그대로)
-    const tileA = '#FFF5EE', tileB = '#FFD8E4';
+    // 사양서 색상: 크림화이트 #FFF5EE + 블러쉬핑크 #F2D9E0
+    const tileA = '#FFF5EE', tileB = '#F2D9E0';
     for (let row = 0; row < Math.ceil(sz / tw) + 1; row++) {
       for (let col = 0; col < Math.ceil(sz / tw) + 1; col++) {
         ctx.fillStyle = (row + col) % 2 === 0 ? tileA : tileB;
         ctx.fillRect(col * tw, row * tw, tw, tw);
       }
     }
-    // 줄눈 (명확하게 — 셀 셰이딩과 어울리는 선명한 경계)
-    ctx.strokeStyle = '#E8B8C0';
-    ctx.lineWidth = 2.0;
+    // 사양서 줄눈: #D4A8B0 (뮤티드 로즈), 아주 얇게
+    ctx.strokeStyle = '#D4A8B0';
+    ctx.lineWidth = 0.8;
     for (let i = 0; i <= sz; i += tw) {
       ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, sz); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(sz, i); ctx.stroke();
@@ -209,16 +200,17 @@ export class CafeScene {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(85, 85);
+    // 반복 줄임: 타일을 크게 → Sobel 엣지 검출 빈도 감소 → 격자 검게 안 됨
+    tex.repeat.set(40, 40);
     tex.needsUpdate = true;
 
+    // MeshLambertMaterial: 선형 조명, 툰 스텝 없음 → 바닥이 균일하게 밝음
     const floorMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1200, 1200),
-      new THREE.MeshToonMaterial({ map: tex, gradientMap: getToonGradientMap() })
+      new THREE.MeshLambertMaterial({ map: tex })
     );
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.y = 0;
-    floorMesh.receiveShadow = true;
     this.scene.add(floorMesh);
   }
 
@@ -238,8 +230,6 @@ export class CafeScene {
     panels.forEach(({ w, d, px, pz, color }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, cH, d), mat(color));
       m.position.set(px, cH / 2, pz);
-      m.castShadow = true;
-      m.receiveShadow = true;
       this.scene.add(m);
     });
 
@@ -253,8 +243,6 @@ export class CafeScene {
     ].forEach(({ w, d, px, pz }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, d), mat(C.counterTop));
       m.position.set(px, cH + 0.045, pz);
-      m.castShadow = true;
-      m.receiveShadow = true;
       this.scene.add(m);
     });
 
@@ -895,9 +883,18 @@ export class CafeScene {
     );
     top.position.y = 0.76;
     top.userData.tableId = tableId;
-    top.castShadow = true;
-    top.receiveShadow = true;
     group.add(top);
+
+    // 카툰 평면 그림자 — 실제 그림자맵 대신 따뜻한 원형 틴트
+    const dropShadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.72, 18),
+      new THREE.MeshBasicMaterial({
+        color: 0xD4A0B0, transparent: true, opacity: 0.20, depthWrite: false,
+      })
+    );
+    dropShadow.rotation.x = -Math.PI / 2;
+    dropShadow.position.set(0, 0.004, 0);
+    group.add(dropShadow);
 
     const rim = new THREE.Mesh(
       new THREE.TorusGeometry(TABLE_R, 0.026, 6, 24), mat(C.tableLeg)

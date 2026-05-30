@@ -111,9 +111,8 @@ const CelEdgeShader = {
       float vign = 1.0 - dot(vigOff, vigOff) * uVignette;
       finalRgb *= clamp(vign, 0.0, 1.0);
 
-      // ── 노출 + Reinhard 톤 매핑 ────────────────────
+      // 노출 보정만 (Reinhard 제거 — 파스텔 SDR 색상은 톤매핑 불필요)
       finalRgb *= uExposure;
-      finalRgb = finalRgb / (finalRgb + vec3(1.0));
 
       gl_FragColor = mix(vec4(finalRgb, 1.0), vec4(uEdgeColor, 1.0), edge);
     }
@@ -236,8 +235,7 @@ export class WorldRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
     this.renderer.setClearColor(0xFFE8D6, 1);   // 웜 아프리콧 배경
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;  // 가장 빠른 그림자
+    this.renderer.shadowMap.enabled = false;  // 카툰 평면 그림자로 대체
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
     // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
