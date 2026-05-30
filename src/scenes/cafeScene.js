@@ -134,26 +134,37 @@ export class CafeScene {
   // 레퍼런스 스타일: 따뜻한 실내 카페 — 다층 톤 구현을 위해
   // 앰비언트 낮게 + 강한 주광으로 MeshToonMaterial 스텝 가시화
   _setupLights() {
-    // 배경: 짙은 퍼플-마룬 (레퍼런스 공통 다크 배경)
     this.scene.background = new THREE.Color(0x2A1835);
 
-    // ── 앰비언트: 밝은 마젠타-핑크 ──────────────────────────
-    // 이전: #4A1850 lum≈0.09 (거의 검정) → 그림자 면이 까맣게 됨
-    // 수정: #C060B0 lum≈0.43 (밝은 핑크) → 그림자 면도 채도 높은 핑크
-    this.scene.add(new THREE.AmbientLight(0xC060B0, 0.60));
+    // 앰비언트: 낮춰서 명암 대비 확보 (낮을수록 그림자 더 극적)
+    this.scene.add(new THREE.AmbientLight(0xC060B0, 0.32));
 
-    // 메인 주광: 따뜻한 크림-핑크, 아이소메트릭 좌상단
-    const sun = new THREE.DirectionalLight(0xFFE0F0, 1.40);
+    // 메인 주광: 강한 크림-화이트, 그림자 활성화
+    const sun = new THREE.DirectionalLight(0xFFF0FF, 2.4);
     sun.position.set(9, 14, 9);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(512, 512);
+    sun.shadow.camera.near   =  1;
+    sun.shadow.camera.far    = 50;
+    sun.shadow.camera.left   = -18;
+    sun.shadow.camera.right  =  18;
+    sun.shadow.camera.top    =  18;
+    sun.shadow.camera.bottom = -18;
+    sun.shadow.bias = -0.001;
     this.scene.add(sun);
 
-    // 보조광: 약한 민트 쿨 채움 (레퍼런스의 민트 악센트)
-    const fill = new THREE.DirectionalLight(0x80E8C8, 0.22);
+    // 림라이트: 뒤에서 차가운 민트 — 명암 입체감 + 카와이 일러스트 특유의 빛
+    const rim = new THREE.DirectionalLight(0x80FFE8, 0.70);
+    rim.position.set(-9, 10, -9);
+    this.scene.add(rim);
+
+    // 보조광: 약한 민트 쿨 채움
+    const fill = new THREE.DirectionalLight(0x80E8C8, 0.14);
     fill.position.set(-5, 6, -5);
     this.scene.add(fill);
 
-    // 카운터 포인트: 따뜻한 핑크-화이트 글로우
-    const cl = new THREE.PointLight(0xFF90C8, 2.2, 14);
+    // 카운터 포인트: 밝은 핑크 글로우 (블룸 소스)
+    const cl = new THREE.PointLight(0xFFB0E8, 4.5, 20);
     cl.position.set(0, 3.8, 0);
     this.scene.add(cl);
   }
@@ -193,6 +204,7 @@ export class CafeScene {
     );
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.y = 0;
+    floorMesh.receiveShadow = true;
     this.scene.add(floorMesh);
   }
 
@@ -212,6 +224,8 @@ export class CafeScene {
     panels.forEach(({ w, d, px, pz, color }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, cH, d), mat(color));
       m.position.set(px, cH / 2, pz);
+      m.castShadow = true;
+      m.receiveShadow = true;
       this.scene.add(m);
     });
 
@@ -225,6 +239,8 @@ export class CafeScene {
     ].forEach(({ w, d, px, pz }) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, d), mat(C.counterTop));
       m.position.set(px, cH + 0.045, pz);
+      m.castShadow = true;
+      m.receiveShadow = true;
       this.scene.add(m);
     });
 
@@ -631,7 +647,7 @@ export class CafeScene {
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.082, 8, 8),
       new THREE.MeshToonMaterial({
-        color: C.lampBulb, emissive: 0xFFD040, emissiveIntensity: 0.8,
+        color: C.lampBulb, emissive: 0xFFD040, emissiveIntensity: 2.8,
         gradientMap: getToonGradientMap(),
       })
     );
@@ -645,7 +661,7 @@ export class CafeScene {
     group.add(neck);
 
     if (addPointLight) {
-      const light = new THREE.PointLight(0xFFD870, 0.55, 5.5);
+      const light = new THREE.PointLight(0xFFD870, 1.4, 7.0);
       light.position.set(localX, ceilY - cordLen - 0.14, localZ);
       group.add(light);
     }
@@ -755,6 +771,8 @@ export class CafeScene {
     );
     top.position.y = 0.76;
     top.userData.tableId = tableId;
+    top.castShadow = true;
+    top.receiveShadow = true;
     group.add(top);
 
     const rim = new THREE.Mesh(

@@ -36,7 +36,9 @@ const CelEdgeShader = {
     uDuoHighlight: { value: new THREE.Color(0xffd8f0) },  // 밝은 핑크-크림
     uDuoStrength:  { value: 0.45 },  // shadow가 밝아졌으니 강도 올려도 칙칙하지 않음
     uSatBoost:     { value: 1.30 },  // 채도 부스트 강화
-    uVignette:     { value: 0.22 },  // 비녜트 살짝 줄임 (너무 어두우면 칙칙)
+    uVignette:      { value: 0.18 },
+    uBloomStrength: { value: 0.40 },
+    uExposure:      { value: 1.15 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -58,6 +60,8 @@ const CelEdgeShader = {
     uniform float     uDuoStrength;
     uniform float     uSatBoost;
     uniform float     uVignette;
+    uniform float     uBloomStrength;
+    uniform float     uExposure;
     varying vec2 vUv;
 
     float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -65,7 +69,7 @@ const CelEdgeShader = {
     void main() {
       vec2 px = uThickness / uResolution;
 
-      // ── 색상 Sobel (색 경계 → 아웃라인) ───────────
+      // ── 색상 Sobel ─────────────────────────────────
       vec3 cN = texture2D(tDiffuse, vUv + vec2( 0.0,  px.y)).rgb;
       vec3 cS = texture2D(tDiffuse, vUv + vec2( 0.0, -px.y)).rgb;
       vec3 cE = texture2D(tDiffuse, vUv + vec2( px.x, 0.0 )).rgb;
@@ -74,7 +78,7 @@ const CelEdgeShader = {
       float ly = lum(cN) - lum(cS);
       float colorEdge = sqrt(lx*lx + ly*ly) * uColorSens;
 
-      // ── 깊이 Sobel (실루엣 → 아웃라인) ────────────
+      // ── 깊이 Sobel ─────────────────────────────────
       float dN = texture2D(tDepth, vUv + vec2( 0.0,  px.y)).r;
       float dS = texture2D(tDepth, vUv + vec2( 0.0, -px.y)).r;
       float dE = texture2D(tDepth, vUv + vec2( px.x, 0.0 )).r;
@@ -88,18 +92,31 @@ const CelEdgeShader = {
       // ── 듀오톤 컬러 그레이딩 ───────────────────────
       vec4 base = texture2D(tDiffuse, vUv);
       float l = lum(base.rgb);
-      l = pow(l, 0.88);  // 중간톤 약간 밝게
+      l = pow(l, 0.85);
       vec3 duotone  = mix(uDuoShadow, uDuoHighlight, l);
       vec3 finalRgb = mix(base.rgb, duotone, uDuoStrength);
 
-      // ── 채도 부스트 (파스텔 비비드) ────────────────
+      // ── 채도 부스트 ────────────────────────────────
       float grayL = lum(finalRgb);
       finalRgb = mix(vec3(grayL), finalRgb, uSatBoost);
 
-      // ── 비녜트 (가장자리 자연스러운 어두움) ────────
+      // ── 블룸 (빛 산란 — 밝은 영역 글로우) ──────────
+      vec2 bpx = uThickness * 3.5 / uResolution;
+      vec3 bs  = texture2D(tDiffuse, vUv + vec2( bpx.x,  bpx.y)).rgb
+               + texture2D(tDiffuse, vUv + vec2(-bpx.x,  bpx.y)).rgb
+               + texture2D(tDiffuse, vUv + vec2( bpx.x, -bpx.y)).rgb
+               + texture2D(tDiffuse, vUv + vec2(-bpx.x, -bpx.y)).rgb;
+      bs *= 0.25;
+      finalRgb += bs * smoothstep(0.50, 0.82, lum(bs)) * uBloomStrength;
+
+      // ── 비녜트 ─────────────────────────────────────
       vec2 vigOff = (vUv - 0.5) * 2.0;
       float vign = 1.0 - dot(vigOff, vigOff) * uVignette;
       finalRgb *= clamp(vign, 0.0, 1.0);
+
+      // ── 노출 + Reinhard 톤 매핑 ────────────────────
+      finalRgb *= uExposure;
+      finalRgb = finalRgb / (finalRgb + vec3(1.0));
 
       gl_FragColor = mix(vec4(finalRgb, 1.0), vec4(uEdgeColor, 1.0), edge);
     }
@@ -222,7 +239,8 @@ export class WorldRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
     this.renderer.setClearColor(0x2A1835, 1);   // 짙은 퍼플 배경
-    this.renderer.shadowMap.enabled = false;    // 성능 우선: 그림자맵 비활성화
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;  // 가장 빠른 그림자
 
     // ── Post-process 셋업 (EffectComposer 미사용) ────────────
     // EffectComposer clone()은 depthTexture를 공유 → Feedback loop 원인
@@ -243,11 +261,13 @@ export class WorldRenderer {
         uDepthSens:    { value: 160.0 },
         uColorSens:    { value: 2.0 },
         uThickness:    { value: 1.1 },
-        uDuoShadow:    { value: new THREE.Color(0x8040a8) },
-        uDuoHighlight: { value: new THREE.Color(0xffd8f0) },
-        uDuoStrength:  { value: 0.45 },
-        uSatBoost:     { value: 1.30 },
-        uVignette:     { value: 0.22 },
+        uDuoShadow:    { value: new THREE.Color(0x9040b8) },
+        uDuoHighlight: { value: new THREE.Color(0xfff4ff) },  // 더 밝은 화이트핑크
+        uDuoStrength:  { value: 0.35 },  // 낮춰서 원본 색 더 살림
+        uSatBoost:     { value: 1.55 },
+        uVignette:     { value: 0.18 },
+        uBloomStrength:{ value: 0.40 },
+        uExposure:     { value: 1.15 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,
