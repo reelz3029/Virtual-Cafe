@@ -25,15 +25,18 @@ const CelEdgeShader = {
     tDiffuse:      { value: null },
     tDepth:        { value: null },
     uResolution:   { value: new THREE.Vector2(1, 1) },
-    uEdgeColor:    { value: new THREE.Color(0x251535) },  // 짙은 퍼플 아웃라인
-    uDepthSens:    { value: 175.0 },
-    uColorSens:    { value: 2.2  },
+    uEdgeColor:    { value: new THREE.Color(0x2a1240) },  // 소프트 다크 퍼플
+    uDepthSens:    { value: 160.0 },
+    uColorSens:    { value: 2.0  },
     uThickness:    { value: 1.1  },
-    uDuoShadow:    { value: new THREE.Color(0x2a0838) },  // 짙은 퍼플-마룬
-    uDuoHighlight: { value: new THREE.Color(0xffe0e8) },  // 따뜻한 핑크-크림
-    uDuoStrength:  { value: 0.38 },  // 부드러운 컬러 그레이딩 (소재 색 유지)
-    uSatBoost:     { value: 1.22 },  // 채도 부스트 (카와이 비비드)
-    uVignette:     { value: 0.30 },  // 비녜트 강도
+    // ── 핵심 수정: shadow color를 밝은 채도 높은 퍼플로 ──
+    // 이전 #2a0838 (lum≈0.06 거의 검정) → 중간톤이 어두운 회보라로 퇴색
+    // 수정 #8040A8 (lum≈0.26 밝은 퍼플) → 어두운 면도 채도 유지
+    uDuoShadow:    { value: new THREE.Color(0x8040a8) },  // 밝은 채도 퍼플
+    uDuoHighlight: { value: new THREE.Color(0xffd8f0) },  // 밝은 핑크-크림
+    uDuoStrength:  { value: 0.45 },  // shadow가 밝아졌으니 강도 올려도 칙칙하지 않음
+    uSatBoost:     { value: 1.30 },  // 채도 부스트 강화
+    uVignette:     { value: 0.22 },  // 비녜트 살짝 줄임 (너무 어두우면 칙칙)
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -236,15 +239,15 @@ export class WorldRenderer {
         tDiffuse:      { value: this._sceneTarget.texture },
         tDepth:        { value: this._sceneTarget.depthTexture },
         uResolution:   { value: new THREE.Vector2(W, H) },
-        uEdgeColor:    { value: new THREE.Color(0x251535) },
-        uDepthSens:    { value: 175.0 },
-        uColorSens:    { value: 2.2 },
+        uEdgeColor:    { value: new THREE.Color(0x2a1240) },
+        uDepthSens:    { value: 160.0 },
+        uColorSens:    { value: 2.0 },
         uThickness:    { value: 1.1 },
-        uDuoShadow:    { value: new THREE.Color(0x2a0838) },
-        uDuoHighlight: { value: new THREE.Color(0xffe0e8) },
-        uDuoStrength:  { value: 0.38 },
-        uSatBoost:     { value: 1.22 },
-        uVignette:     { value: 0.30 },
+        uDuoShadow:    { value: new THREE.Color(0x8040a8) },
+        uDuoHighlight: { value: new THREE.Color(0xffd8f0) },
+        uDuoStrength:  { value: 0.45 },
+        uSatBoost:     { value: 1.30 },
+        uVignette:     { value: 0.22 },
       },
       vertexShader:   CelEdgeShader.vertexShader,
       fragmentShader: CelEdgeShader.fragmentShader,

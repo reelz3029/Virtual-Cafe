@@ -19,7 +19,8 @@ import { store } from '../store/gameStore.js';
 let _toonGradientMap = null;
 function getToonGradientMap() {
   if (_toonGradientMap) return _toonGradientMap;
-  const colors = new Uint8Array([55, 130, 200, 255]);
+  // 최솟값 105: 그림자 면도 빛의 41%는 받도록 → 칙칙함 방지
+  const colors = new Uint8Array([105, 168, 218, 255]);
   const tex = new THREE.DataTexture(colors, 4, 1);
   tex.format = THREE.RedFormat;
   tex.minFilter = THREE.NearestFilter;
@@ -136,21 +137,23 @@ export class CafeScene {
     // 배경: 짙은 퍼플-마룬 (레퍼런스 공통 다크 배경)
     this.scene.background = new THREE.Color(0x2A1835);
 
-    // 앰비언트: 따뜻한 퍼플-핑크 → 그림자 영역에 보라 틴트
-    this.scene.add(new THREE.AmbientLight(0x4A1850, 0.50));
+    // ── 앰비언트: 밝은 마젠타-핑크 ──────────────────────────
+    // 이전: #4A1850 lum≈0.09 (거의 검정) → 그림자 면이 까맣게 됨
+    // 수정: #C060B0 lum≈0.43 (밝은 핑크) → 그림자 면도 채도 높은 핑크
+    this.scene.add(new THREE.AmbientLight(0xC060B0, 0.60));
 
-    // 메인 주광: 따뜻한 핑크-크림, 아이소메트릭 좌상단
-    const sun = new THREE.DirectionalLight(0xFFE8F0, 1.55);
+    // 메인 주광: 따뜻한 크림-핑크, 아이소메트릭 좌상단
+    const sun = new THREE.DirectionalLight(0xFFE0F0, 1.40);
     sun.position.set(9, 14, 9);
     this.scene.add(sun);
 
-    // 보조 반사광: 반대편 쿨한 민트 (살짝 차가운 채움)
-    const fill = new THREE.DirectionalLight(0x80D8C0, 0.16);
+    // 보조광: 약한 민트 쿨 채움 (레퍼런스의 민트 악센트)
+    const fill = new THREE.DirectionalLight(0x80E8C8, 0.22);
     fill.position.set(-5, 6, -5);
     this.scene.add(fill);
 
-    // 카운터 포인트 라이트: 핑크 글로우 — 카와이 실내 느낌
-    const cl = new THREE.PointLight(0xFF80B0, 1.8, 13);
+    // 카운터 포인트: 따뜻한 핑크-화이트 글로우
+    const cl = new THREE.PointLight(0xFF90C8, 2.2, 14);
     cl.position.set(0, 3.8, 0);
     this.scene.add(cl);
   }
