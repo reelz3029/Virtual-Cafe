@@ -62,16 +62,12 @@ function mat(color, opts = {}) {
 }
 
 // ── 타일별 테이블 레이아웃 (타일 중심 기준 오프셋) ───────────
-// 3테이블 고정, ±3 이내 — 삼각/L자 배치로 빈 공간 최소화
+// 2패턴 체커보드 — tx+tz 홀짝으로 결정적 배치, 랜덤 없음
 const TILE_LAYOUTS = [
-  [{ x: -2.5, z: -2.5 }, { x:  2.5, z:  2.5 }, { x: -2.5, z:  2.5 }],  // 삼각 /
-  [{ x:  2.5, z: -2.5 }, { x: -2.5, z:  2.5 }, { x:  2.5, z:  2.5 }],  // 삼각 \
-  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }, { x:  0.0, z: -3.0 }],  // L 수평+아래
-  [{ x: -3.0, z:  0.0 }, { x:  3.0, z:  0.0 }, { x:  0.0, z:  3.0 }],  // L 수평+위
-  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }, { x: -3.0, z:  0.0 }],  // L 수직+왼
-  [{ x:  0.0, z: -3.0 }, { x:  0.0, z:  3.0 }, { x:  3.0, z:  0.0 }],  // L 수직+오른
-  [{ x: -2.5, z: -2.5 }, { x:  2.5, z: -2.5 }, { x:  0.0, z:  2.8 }],  // 삼각 위
-  [{ x: -2.5, z:  2.5 }, { x:  2.5, z:  2.5 }, { x:  0.0, z: -2.8 }],  // 삼각 아래
+  // 짝수 타일 (|tx|+|tz| 짝): 정사각형 — 인접 타일과 5유닛 등간격
+  [{ x:-2.5, z:-2.5 }, { x: 2.5, z:-2.5 }, { x:-2.5, z: 2.5 }, { x: 2.5, z: 2.5 }],
+  // 홀수 타일 (|tx|+|tz| 홀): 다이아몬드 — 정사각 사이를 메워 전체 밀도 균일
+  [{ x: 0.0, z:-3.0 }, { x: 3.0, z: 0.0 }, { x: 0.0, z: 3.0 }, { x:-3.0, z: 0.0 }],
 ];
 
 // 타일별 램프 오프셋 (타일 중심 기준, ±2.5 이내)
@@ -194,8 +190,8 @@ export class CafeScene {
     });
 
     // 카운터 위 장비
-    this._buildCoffeeMachine(-0.9, cH, -1.4, '/models/CoffeeMachine_Ragular.glb', 0.44);
-    this._buildCoffeeMachine( 0.5, cH, -1.4, '/models/CoffeeMacnine_Small.glb',   0.36);
+    this._buildCoffeeMachine(-0.9, cH+0.1, -1.4, '/models/CoffeeMachine_Ragular.glb', 0.44);
+    this._buildCoffeeMachine( 0, cH+0.1, -1.4, '/models/CoffeeMacnine_Small.glb',   0.36);
     this._addCupStack(1.5, cH, 1.4);
     this._addCounterPlant(-2.0, cH+0.2, 0.7);
 
@@ -522,18 +518,17 @@ export class CafeScene {
     const seed = Math.abs(tx * 17 + tz * 31 + Math.abs(tx * tz) * 7) % 1000;
     const tableIds = [];
 
-    // layoutIdx는 if/else 모두에서 접근 가능하게 먼저 선언
-    const layoutIdx = isCenter ? 0 : seed % TILE_LAYOUTS.length;
+    // 체커보드 배치: tx+tz 홀짝으로 패턴 결정 (seed 랜덤 없음)
+    const layoutIdx = isCenter ? 0 : (Math.abs(tx) + Math.abs(tz)) % TILE_LAYOUTS.length;
 
     if (isCenter) {
-      // 중앙 타일: 카운터(x:±2.5, z:±1.6) 주변에 6개 테이블 — 원점에서 ≥4.0 거리
+      // 중앙 타일: 카운터로부터 최대한 멀리 — 4개 코너(±4.5, ±4.5)
+      // 카운터 코너(2.5,1.6)까지의 거리 ≈ 3.5유닛, 의자 뺀 여유 ≈ 2.2유닛
       const periphery = [
-        { x: -3.5, z: -3.5 },  // SW
-        { x:  3.5, z: -3.5 },  // SE
-        { x: -4.2, z:  0.2 },  // W
-        { x:  4.2, z:  0.2 },  // E
-        { x: -3.0, z:  3.5 },  // NW
-        { x:  3.0, z:  3.5 },  // NE
+        { x: -4.5, z: -4.5 },
+        { x:  4.5, z: -4.5 },
+        { x: -4.5, z:  4.5 },
+        { x:  4.5, z:  4.5 },
       ];
       periphery.forEach((pos, i) => {
         const id = `table_${startIdx + i}`;
@@ -908,7 +903,7 @@ export class CafeScene {
     // 외곽 링에 추가 테이블 배치
     for (let i = this._tableCount; i < newCount; i++) {
       const angle  = (i * Math.PI * 2) / 8;
-      const radius = TILE_SIZE * 2.2 + Math.floor(i / 8) * TILE_SIZE;
+      const radius = TILE_SIZE * 1.8 + Math.floor(i / 8) * TILE_SIZE;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       this._createTable(`table_${i}`, x, z, SEATS_PER_TABLE);

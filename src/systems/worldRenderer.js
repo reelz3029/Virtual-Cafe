@@ -26,12 +26,17 @@ export class WorldRenderer {
     this._cam = {
       target:    new THREE.Vector3(0, 0, 0),
       zoom:      6,
+      targetZoom: 6,  // smooth lerp 목표값
       minZoom:   3,
       maxZoom:   14,
       isDragging: false,
       dragStart: { x: 0, y: 0 },   // 드래그 시작점 (클릭 구분용)
       lastMouse: { x: 0, y: 0 },
       velocity:  { x: 0, z: 0 },
+      // 중간 버튼 드래그 줌
+      isZoomDrag:    false,
+      zoomDragStartY: 0,
+      zoomDragBase:   6,
     };
 
     // 키보드 입력 상태 (WASD + 방향키)
@@ -138,6 +143,7 @@ export class WorldRenderer {
   // ── 이벤트 바인딩 ────────────────────────────────────────
   _bindEvents() {
     this.canvas.addEventListener('mousedown',  e => this._onMouseDown(e));
+    this.canvas.addEventListener('mousedown',  e => { if (e.button === 1) e.preventDefault(); });
     window.addEventListener('mousemove',       e => this._onWindowMouseMove(e));
     window.addEventListener('mouseup',         e => this._onMouseUp(e));
     this.canvas.addEventListener('touchstart', e => this._onTouchStart(e), { passive: true });
@@ -188,6 +194,14 @@ export class WorldRenderer {
   }
 
   _onMouseDown(e) {
+    if (e.button === 1) {
+      // 휠 클릭 드래그 → 줌 조작
+      this._cam.isZoomDrag    = true;
+      this._cam.zoomDragStartY = e.clientY;
+      this._cam.zoomDragBase   = this._cam.targetZoom;
+      e.preventDefault();
+      return;
+    }
     if (e.button !== 0) return;
     this._cam.isDragging = true;
     this._cam.dragStart  = { x: e.clientX, y: e.clientY };
@@ -195,9 +209,15 @@ export class WorldRenderer {
     this._cam.velocity   = { x: 0, z: 0 };
   }
 
-  // window 전체 mousemove — drag + hover 통합
+  // window 전체 mousemove — drag + zoom-drag + hover 통합
   _onWindowMouseMove(e) {
-    if (this._cam.isDragging) {
+    if (this._cam.isZoomDrag) {
+      // 위로 드래그 → 줌인 / 아래 → 줌아웃
+      const dy = e.clientY - this._cam.zoomDragStartY;
+      const newZoom = this._cam.zoomDragBase * (1 + dy * 0.006);
+      this._cam.targetZoom = Math.max(this._cam.minZoom,
+        Math.min(this._cam.maxZoom, newZoom));
+    } else if (this._cam.isDragging) {
       this._onMouseMove(e);
     } else {
       this._checkTableHover(e.clientX, e.clientY);
@@ -218,6 +238,10 @@ export class WorldRenderer {
   }
 
   _onMouseUp(e) {
+    if (this._cam.isZoomDrag) {
+      this._cam.isZoomDrag = false;
+      return;
+    }
     if (!this._cam.isDragging) return;
     this._cam.isDragging = false;
 
@@ -243,10 +267,9 @@ export class WorldRenderer {
   }
 
   _onWheel(e) {
-    const delta = e.deltaY > 0 ? 1.08 : 0.93;
-    this._cam.zoom = Math.max(this._cam.minZoom,
-      Math.min(this._cam.maxZoom, this._cam.zoom * delta));
-    this._updateCameraFrustum();
+    const factor = e.deltaY > 0 ? 1.12 : 0.89;
+    this._cam.targetZoom = Math.max(this._cam.minZoom,
+      Math.min(this._cam.maxZoom, this._cam.targetZoom * factor));
   }
 
   _handleClick(clientX, clientY) {
@@ -486,6 +509,12 @@ export class WorldRenderer {
 
       // 키보드 이동 (WASD + 방향키)
       this._applyKeyMovement(delta);
+
+      // 줌 스무딩 (targetZoom → zoom 보간)
+      if (Math.abs(this._cam.zoom - this._cam.targetZoom) > 0.001) {
+        this._cam.zoom += (this._cam.targetZoom - this._cam.zoom) * 0.14;
+        this._updateCameraFrustum();
+      }
 
       // 관성 (팬 후 천천히 멈춤)
       if (!this._cam.isDragging) {
