@@ -88,6 +88,9 @@ const INITIAL_STATE = {
     zoom: 1.0,
   },
 
+  // ── 뷰 모드: 'iso'(로비 탑다운) | 'fp'(착석 1인칭) ──
+  viewMode: 'iso',
+
   // ── 시스템 ──
   sessionStart: null,
   coinAccumulator: 0,
@@ -179,6 +182,11 @@ export function setOnlineUsers(users) {
 /** 사용자 착석 */
 export function setSeat(tableId, seatIndex) {
   store.setState({ myTableId: tableId, mySeatIndex: seatIndex });
+}
+
+/** 뷰 모드 설정 ('iso' | 'fp') */
+export function setViewMode(mode) {
+  store.setState({ viewMode: mode });
 }
 
 /** 채팅 메시지 추가 (단일) */

@@ -5,6 +5,7 @@
 
 import { store, toggleChat } from '../store/gameStore.js';
 import { multiplayerSim } from '../systems/multiplayerSim.js';
+import { getWorldRenderer } from '../systems/worldRenderer.js';
 
 export class ChatPanel {
   constructor(container) {
@@ -210,6 +211,7 @@ export class ChatPanel {
 
     this._el.querySelector('#btn-leave-table')?.addEventListener('click', () => {
       multiplayerSim.leaveTable();
+      getWorldRenderer()?.exitToIso();   // 자리 떠나면 로비 뷰로 복귀
     });
 
     // 탭 전환

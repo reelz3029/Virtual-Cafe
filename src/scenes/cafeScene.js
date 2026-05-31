@@ -25,45 +25,44 @@ const TABLE_R         = 0.52;   // 테이블 반경 (0.42 → 0.52)
 const SEAT_DIST       = 0.82;   // 의자-테이블 거리 (0.65 → 0.82)
 
 // ── 비비드 카툰 카페 팔레트 ───────────────────────────────────
-// Base  : Cream White #FFF5EE / Soft Pink #FFB7C5
-// Accent: Mint #B5EAD7 / Lavender #C9B8E8 / Peach #FFCBA4
-// Outline: #3D1C2E (post-process)
+// 따뜻한 클래식 우디 카페 — 골든아워 햇살, 원목, 크림, 앰버
+// Wood: #E8C9A0 / #D4A87A · Walnut: #6B4A2E / #5A3E28 · Oak: #C89A6A
 const C = {
   // 바닥
-  grout:         0xF5C8C8,
+  grout:         0xB8895C,  // 우드 심(seam)
   // 카운터
-  counterTop:    0xFFFAF0,  // 크림 화이트
-  counterFront:  0xFFB7C5,  // 소프트 핑크
-  counterSide:   0xFFCBA4,  // 피치
+  counterTop:    0x6B4A2E,  // 다크 월넛
+  counterFront:  0xC89A6A,  // 오크
+  counterSide:   0xA6794E,  // 미드 오크
   // 테이블
-  tableTop:      0xFFFAF0,  // 크림 화이트
-  tableLeg:      0x8B5C6A,  // 다크 로즈우드 (대비용)
+  tableTop:      0xD9B381,  // 웜 라이트 우드
+  tableLeg:      0x5A3E28,  // 다크 월넛 다리
   // 의자
-  chairWood:     0x8B5C6A,  // 다크 로즈우드
-  chairPad:      0xFFB7C5,  // 소프트 핑크 (기본, 타일별로 override)
+  chairWood:     0x6B4A2E,  // 월넛 프레임
+  chairPad:      0xC4885A,  // 웜 탄 (기본, 타일별로 override)
   // 램프
-  lampCord:      0xC47A8A,  // 우디 핑크 코드
-  lampBulb:      0xFFFBE0,  // 따뜻한 크림
-  lampSocket:    0xFFCBA4,  // 피치
-  lampShade:     0xFFB7C5,  // 핑크 갓
+  lampCord:      0x5A3E28,  // 다크 월넛 코드
+  lampBulb:      0xFFE3A8,  // 따뜻한 필라멘트
+  lampSocket:    0x6B4A2E,  // 월넛 소켓
+  lampShade:     0xC89A6A,  // 오크 갓
   // 식물
-  leaf1:         0xB5EAD7,  // 민트
-  leaf2:         0x8FD9BF,  // 미디엄 민트
-  pot:           0xFFCBA4,  // 피치 화분
+  leaf1:         0x7A8B5A,  // 뮤티드 세이지
+  leaf2:         0x5E7344,  // 딥 세이지
+  pot:           0xA86844,  // 테라코타 화분
   // 선반/간판
-  shelfWood:     0xFFCBA4,  // 피치 선반
-  signDark:      0xC9B8E8,  // 라벤더 간판
+  shelfWood:     0x6B4A2E,  // 월넛 선반
+  signDark:      0x5A3E28,  // 월넛 간판
   // 기타
-  coffeeMachine: 0xA8D8C8,  // 파스텔 민트 (포컬 포인트)
-  pole:          0xC9B8E8,  // 라벤더 폴
-  rug1:          0xFFB7C5,  // 핑크 러그
-  rug2:          0xB5EAD7,  // 민트 러그
-  rug3:          0xC9B8E8,  // 라벤더 러그
-  // 책 소품
-  bookA:         0xFFB7C5,
-  bookB:         0xC9B8E8,
-  bookC:         0xFFCBA4,
-  bookD:         0xB5EAD7,
+  coffeeMachine: 0x8FA89A,  // 세이지-스틸 (포컬 액센트)
+  pole:          0x5A3E28,  // 월넛 폴
+  rug1:          0xB5705A,  // 테라코타 러그
+  rug2:          0x9A8C6E,  // 올리브-탄 러그
+  rug3:          0xC9A678,  // 위트 러그
+  // 책 소품 (어시 톤)
+  bookA:         0xB5705A,  // 테라코타
+  bookB:         0x7A8B5A,  // 세이지
+  bookC:         0xC9A678,  // 위트
+  bookD:         0x9A8C6E,  // 올리브-탄
 };
 
 // ── 재질 캐시 (MeshLambertMaterial) ────────────────────────
@@ -128,60 +127,79 @@ export class CafeScene {
       .filter(obj => obj.isLight)
       .forEach(light => this.scene.remove(light));
 
-    this.scene.background = new THREE.Color(0xFFE8D6);
-    this.scene.fog = new THREE.FogExp2(0xFFE8F0, 0.005);
+    // 햇살 드는 크림 벽 / 따뜻한 대기
+    this.scene.background = new THREE.Color(0xF2E3CC);
+    this.scene.fog = new THREE.FogExp2(0xF0E0C8, 0.004);
 
-    // STEP 1 — 글로벌 앰비언트 (사양서 그대로)
-    const ambient = new THREE.AmbientLight(0xFFF0F5, 1.2);
+    // STEP 1 — 글로벌 앰비언트 (웜 크림, 약간 낮춰 햇살 그라데이션이 보이게)
+    const ambient = new THREE.AmbientLight(0xFFE8C8, 0.9);
     this.scene.add(ambient);
 
-    // STEP 2 — 메인 디렉셔널 (따뜻한 황금 오후, 45° 위)
-    const dirLight = new THREE.DirectionalLight(0xFFEED6, 1.4);
-    dirLight.position.set(5, 10, 5);
+    // STEP 2 — 메인 햇살 (창으로 비스듬히 들어오는 강한 따뜻한 빛)
+    const dirLight = new THREE.DirectionalLight(0xFFE3B0, 1.5);
+    dirLight.position.set(8, 7, 3);
     dirLight.castShadow = false;
     this.scene.add(dirLight);
 
-    // STEP 3 — 소프트 필 라이트 (반대편 — 그림자 면 파스텔 미드톤 유지)
-    const fillLight = new THREE.DirectionalLight(0xFFD6E8, 0.6);
-    fillLight.position.set(-5, 5, -5);
+    // STEP 3 — 필 바운스 (반대편 — 그림자 면을 따뜻한 미드톤으로 유지)
+    const fillLight = new THREE.DirectionalLight(0xE8D8C0, 0.45);
+    fillLight.position.set(-6, 5, -4);
     this.scene.add(fillLight);
 
-    // STEP 4 — 황금 중앙 포인트 (사양서 그대로)
-    const warmPoint = new THREE.PointLight(0xFFD700, 0.8, 30);
+    // STEP 4 — 카운터 위 따뜻한 포인트 (앰버 글로우)
+    const warmPoint = new THREE.PointLight(0xFFC870, 0.7, 25);
     warmPoint.position.set(0, 6, 0);
     this.scene.add(warmPoint);
   }
 
-  // ── 무한 바닥 (대형 평면 + 시임리스 벽돌 텍스처) ───────────
+  // ── 무한 바닥 (대형 평면 + 시임리스 우드 플랭크 텍스처) ─────
   _buildFloor() {
-    const sz = 512, tw = 72;
+    const sz = 512, plankH = 64;  // 가로 플랭크 높이
     const canvas = document.createElement('canvas');
     canvas.width = sz; canvas.height = sz;
     const ctx = canvas.getContext('2d');
 
-    // 사양서 색상: 크림화이트 #FFF5EE + 블러쉬핑크 #F2D9E0
-    const tileA = '#FFF5EE', tileB = '#F2D9E0';
-    for (let row = 0; row < Math.ceil(sz / tw) + 1; row++) {
-      for (let col = 0; col < Math.ceil(sz / tw) + 1; col++) {
-        ctx.fillStyle = (row + col) % 2 === 0 ? tileA : tileB;
-        ctx.fillRect(col * tw, row * tw, tw, tw);
+    // 따뜻한 원목 플랭크 — light #E8C9A0 / dark #D4A87A 교차
+    const plankShades = ['#E8C9A0', '#D4A87A', '#E0BE92', '#D9B284'];
+    const rows = Math.ceil(sz / plankH);
+    for (let row = 0; row < rows; row++) {
+      const y = row * plankH;
+      // 행마다 가로 오프셋으로 벽돌식 엇갈림 — 플랭크 이음새 분절
+      const off = (row % 2) * (sz / 4);
+      const segW = sz / 2;
+      for (let seg = -1; seg <= 2; seg++) {
+        const x = seg * segW + off;
+        const shade = plankShades[Math.abs(row * 3 + seg * 5) % plankShades.length];
+        ctx.fillStyle = shade;
+        ctx.fillRect(x, y, segW, plankH);
+        // 나뭇결 — 미세한 가로 줄무늬
+        ctx.strokeStyle = 'rgba(120,80,50,0.06)';
+        ctx.lineWidth = 1;
+        for (let g = 6; g < plankH; g += 11) {
+          ctx.beginPath(); ctx.moveTo(x, y + g); ctx.lineTo(x + segW, y + g); ctx.stroke();
+        }
       }
     }
-    // 사양서 줄눈: #D4A8B0 (뮤티드 로즈), 아주 얇게
-    ctx.strokeStyle = '#D4A8B0';
-    ctx.lineWidth = 0.8;
-    for (let i = 0; i <= sz; i += tw) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, sz); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(sz, i); ctx.stroke();
+    // 플랭크 이음새 — 얇은 어두운 심 (#B8895C)
+    ctx.strokeStyle = '#B8895C';
+    ctx.lineWidth = 1.4;
+    for (let row = 0; row <= rows; row++) {
+      const y = row * plankH;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sz, y); ctx.stroke();
+      // 세로 이음새 (엇갈림 반영)
+      const off = (row % 2) * (sz / 4);
+      const segW = sz / 2;
+      for (let seg = 0; seg <= 2; seg++) {
+        const x = seg * segW + off;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + plankH); ctx.stroke();
+      }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    // 반복 줄임: 타일을 크게 → Sobel 엣지 검출 빈도 감소 → 격자 검게 안 됨
-    tex.repeat.set(40, 40);
+    tex.repeat.set(38, 38);
     tex.needsUpdate = true;
 
-    // MeshLambertMaterial: 선형 조명, 툰 스텝 없음 → 바닥이 균일하게 밝음
     const floorMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1200, 1200),
       new THREE.MeshLambertMaterial({ map: tex })
@@ -384,9 +402,9 @@ export class CafeScene {
           const hsl = { h: 0, s: 0, l: 0 };
           (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
           let color;
-          if (hsl.l > 0.65)       color = new THREE.Color(0xD8F0E8);
-          else if (hsl.l > 0.35)  color = new THREE.Color(0xA8D8C8);
-          else                    color = new THREE.Color(0x7DBFAA);
+          if (hsl.l > 0.65)       color = new THREE.Color(0xC8C4BC);  // 크롬 하이라이트
+          else if (hsl.l > 0.35)  color = new THREE.Color(0x8FA89A);  // 세이지-스틸
+          else                    color = new THREE.Color(0x5E7366);  // 딥 세이지
           return new THREE.MeshLambertMaterial({ color });
         });
         child.material = Array.isArray(child.material) ? newMats : newMats[0];
@@ -555,8 +573,8 @@ export class CafeScene {
     // 체커보드 배치: tx+tz 홀짝으로 패턴 결정 (seed 랜덤 없음)
     const layoutIdx = isCenter ? 0 : (Math.abs(tx) + Math.abs(tz)) % TILE_LAYOUTS.length;
 
-    // 타일 좌표 기반 쿠션 색상 순환 — 인접 타일과 다른 색
-    const padPalette = [0xFFB7C5, 0xB5EAD7, 0xC9B8E8];  // pink / mint / lavender
+    // 타일 좌표 기반 쿠션 색상 순환 — 인접 타일과 다른 어시 톤
+    const padPalette = [0xB5705A, 0x9A8C6E, 0xC9A678];  // 테라코타 / 올리브-탄 / 위트
     const padCol = padPalette[Math.abs(tx * 3 + tz * 7 + 100) % 3];
 
     if (isCenter) {
@@ -566,7 +584,7 @@ export class CafeScene {
       ];
       periphery.forEach((pos, i) => {
         const id = `table_${startIdx + i}`;
-        this._createTable(id, wx + pos.x, wz + pos.z, SEATS_PER_TABLE, 0xFFB7C5);
+        this._createTable(id, wx + pos.x, wz + pos.z, SEATS_PER_TABLE, 0xB5705A);
         tableIds.push(id);
       });
     } else {
@@ -640,7 +658,7 @@ export class CafeScene {
     group.add(cord);
 
     // 파스텔 돔 갓 (타일별로 색상 다양화)
-    const shadeColors = [C.lampShade, 0xE8D8FF, 0xFFD9C2, 0xD8F0E8, 0xFFE8D0];
+    const shadeColors = [C.lampShade, 0xA86844, 0xB8895C, 0xC9A678, 0xA6794E];
     const shadeCol = shadeColors[Math.abs(Math.round(localX * 7 + localZ * 13)) % shadeColors.length];
     const shade = new THREE.Mesh(
       new THREE.SphereGeometry(0.17, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.52),
@@ -768,7 +786,7 @@ export class CafeScene {
   _addFairyLightsToGroup(group, zOffset, count = 10) {
     const Y = 3.22;
     const spanX = 7.8;
-    const bulbColors = [C.lampShade, 0xE8D8FF, 0xFFD9C2, 0xC8F0D8, 0xFFE8C0, 0xFFBDD6];
+    const bulbColors = [0xFFE3A8, 0xFFD890, 0xFFE8B8, 0xFFDFA0, 0xFFEBC0, 0xFFD37A];
 
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
@@ -852,7 +870,7 @@ export class CafeScene {
     const dropShadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.72, 18),
       new THREE.MeshBasicMaterial({
-        color: 0xD4A0B0, transparent: true, opacity: 0.20, depthWrite: false,
+        color: 0x9A6E48, transparent: true, opacity: 0.18, depthWrite: false,
       })
     );
     dropShadow.rotation.x = -Math.PI / 2;
@@ -868,7 +886,7 @@ export class CafeScene {
 
     // ── 테이블 소품 (모든 테이블: 머그 + 손잡이 + 꽃병) ──────
     const tHash = Math.abs(Math.round(x * 17 + z * 31)) % 6;
-    const mugColors = [0xFFB7C5, 0xB5EAD7, 0xC9B8E8, 0xFFCBA4, 0xFFFAF0, 0xFFB7C5];
+    const mugColors = [0xC89A6A, 0xB5705A, 0xA6794E, 0xC9A678, 0xF2E3CC, 0x8FA89A];
     const mugCol = mugColors[tHash];
     // 머그 몸체
     const mugBody = new THREE.Mesh(
@@ -884,14 +902,14 @@ export class CafeScene {
     mugHandle.rotation.x = Math.PI / 2;
     group.add(mugHandle);
     // 작은 꽃병
-    const vaseColors = [0xFFCBA4, 0xC9B8E8, 0xB5EAD7];
+    const vaseColors = [0xA86844, 0x8FA89A, 0xC9A678];
     const vase = new THREE.Mesh(
       new THREE.CylinderGeometry(0.018, 0.014, 0.105, 8), mat(vaseColors[tHash % 3])
     );
     vase.position.set(-0.16, 0.815, -0.07);
     group.add(vase);
     // 꽃병 위 꽃 (작은 구)
-    const flowerCol = [0xFFB7C5, 0xFFCBA4, 0xB5EAD7][tHash % 3];
+    const flowerCol = [0xC56B5A, 0xE0A860, 0x7A8B5A][tHash % 3];
     const flower = new THREE.Mesh(
       new THREE.SphereGeometry(0.024, 6, 4), mat(flowerCol)
     );

@@ -9,11 +9,20 @@
  */
 
 import * as THREE from 'three';
-import { store, setSeat, showNotification } from '../store/gameStore.js';
+import { store, setSeat, setViewMode, showNotification } from '../store/gameStore.js';
 import { CafeScene }       from '../scenes/cafeScene.js';
 import { multiplayerSim }  from './multiplayerSim.js';
 
+// 활성 렌더러 인스턴스 — ChatPanel 등 외부에서 exitToIso() 호출용
+let _instance = null;
+export function getWorldRenderer() { return _instance; }
 
+// ease-in-out (smoothstep)
+const easeInOut = t => t * t * (3 - 2 * t);
+
+// fp 둘러보기 시야 제한 (rad) — 마우스/키보드 공유
+const FP_YAW_LIMIT   = 1.2;   // 좌우 ≈ ±69°
+const FP_PITCH_LIMIT = 0.5;   // 상하 ≈ ±29°
 
 export class WorldRenderer {
   constructor(canvas) {
@@ -51,9 +60,95 @@ export class WorldRenderer {
     this._hoveredTableId  = null;
     this._tableTooltipEl  = this._createTableTooltip();
 
-    this._initCamera();    // RenderPass 생성 전에 camera가 존재해야 함
+    this._initCamera();    // 활성 카메라(this.camera) = 아이소 로비 뷰
     this._initRenderer();
+
+    // ── 듀얼 카메라 시스템 ──────────────────────────────────
+    this.isoCamera = this.camera;   // 기존 직교 = 로비 뷰
+    this.fpCamera  = new THREE.PerspectiveCamera(
+      55, window.innerWidth / window.innerHeight, 0.1, 100);
+    // 전환용 퍼스펙티브 카메라 (iso↔fp 보간 중 렌더)
+    this._transitionCam = new THREE.PerspectiveCamera(
+      50, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.viewMode  = 'iso';         // 'iso' | 'fp' | 'transition'
+    this._camTween = null;          // 진행 중 전환 상태
+    // 1인칭 둘러보기(look-around) 상태
+    this._fp = { eye: new THREE.Vector3(), baseYaw: 0, basePitch: 0, yaw: 0, pitch: 0 };
+
+    this._createViewToggleButton();
+
     this._bindEvents();
+    _instance = this;
+
+    // 로그인 상태에 따라 시점 버튼 표시/숨김 (로그인 화면에선 숨김)
+    this._syncToggleVisibility(store.getState());
+    this._unsubAuth = store.subscribe(s => this._syncToggleVisibility(s));
+  }
+
+  _syncToggleVisibility(state) {
+    if (!this._viewToggleEl) return;
+    this._viewToggleEl.style.display = state.auth?.isLoggedIn ? 'block' : 'none';
+  }
+
+  // ── 시점 전환 버튼 (항상 표시, iso↔fp 토글) ────────────────
+  _createViewToggleButton() {
+    const el = document.createElement('button');
+    el.id = 'btn-view-toggle';
+    el.style.cssText = `
+      position: fixed; left: 24px; bottom: 24px; z-index: 60; display: none;
+      padding: 11px 18px; border: none; border-radius: 999px;
+      background: rgba(90,62,40,0.92); color: #F7ECD9;
+      font-size: 13px; font-weight: 600; font-family: inherit;
+      cursor: pointer; backdrop-filter: blur(10px);
+      box-shadow: 0 6px 20px rgba(60,40,20,0.30);
+      transition: background 0.15s;
+    `;
+    el.addEventListener('mouseenter', () => { el.style.background = 'rgba(70,48,30,0.96)'; });
+    el.addEventListener('mouseleave', () => { el.style.background = 'rgba(90,62,40,0.92)'; });
+    el.addEventListener('click', () => this.toggleView());
+    document.body.appendChild(el);
+    this._viewToggleEl = el;
+    this._updateViewToggleLabel();
+    return el;
+  }
+
+  _updateViewToggleLabel() {
+    if (!this._viewToggleEl) return;
+    const mode = store.getState().viewMode;
+    this._viewToggleEl.textContent =
+      mode === 'fp' ? '🗺️ 로비로 나가기' : '🪑 1인칭으로 앉기';
+  }
+
+  // ── 시점 토글 (버튼 클릭) ──────────────────────────────────
+  toggleView() {
+    if (this.viewMode === 'transition') return;  // 전환 중 무시
+    if (this.viewMode === 'fp') { this.exitToIso(); return; }
+
+    // iso → fp: 내 캐릭터가 앉은 좌석으로 진입
+    const { myTableId, mySeatIndex } = store.getState();
+    if (myTableId && this._activeScene?.tables?.has(myTableId)) {
+      this.enterFirstPerson(myTableId, mySeatIndex ?? 0);
+      return;
+    }
+    // 아직 안 앉았으면 가장 가까운 테이블에 앉힌 뒤 그 좌석 1인칭
+    const tableId = this._nearestTableId();
+    if (!tableId) { showNotification('주변에 테이블이 없어요 😅', 'info'); return; }
+    setSeat(tableId, 0);
+    multiplayerSim.refreshMyPosition();
+    this.enterFirstPerson(tableId, 0);
+  }
+
+  // 카메라 타겟에 가장 가까운 테이블 id
+  _nearestTableId() {
+    if (!this._activeScene) return null;
+    const t = this._cam.target;
+    let best = null, bestD = Infinity;
+    this._activeScene.tables.forEach((data, id) => {
+      const dx = data.position.x - t.x, dz = data.position.z - t.z;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; best = id; }
+    });
+    return best;
   }
 
   // ── 테이블 hover 툴팁 생성 ──────────────────────────────
@@ -130,7 +225,7 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0xFFE8D6, 1);
+    this.renderer.setClearColor(0xF2E3CC, 1);   // 웜 크림 (햇살 벽)
     this.renderer.shadowMap.enabled = false;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -179,6 +274,7 @@ export class WorldRenderer {
   // A/←: 화면 왼쪽 = 월드 (-x, +z)
   // D/→: 화면 오른쪽 = 월드 (+x, -z)
   _applyKeyMovement(delta) {
+    if (this.viewMode !== 'iso') return;   // fp 모드: 패닝 비활성
     const tag = document.activeElement?.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea') return;
 
@@ -234,6 +330,17 @@ export class WorldRenderer {
   _onMouseMove(e) {
     const dx = e.clientX - this._cam.lastMouse.x;
     const dy = e.clientY - this._cam.lastMouse.y;
+
+    // fp 모드: 좌클릭 드래그로 둘러보기 (yaw/pitch)
+    if (this.viewMode === 'fp') {
+      this._fp.yaw   = THREE.MathUtils.clamp(this._fp.yaw   - dx * 0.004, -FP_YAW_LIMIT, FP_YAW_LIMIT);
+      this._fp.pitch = THREE.MathUtils.clamp(this._fp.pitch - dy * 0.003, -FP_PITCH_LIMIT, FP_PITCH_LIMIT);
+      this._cam.lastMouse = { x: e.clientX, y: e.clientY };
+      this._applyFpCamera();
+      return;
+    }
+    if (this.viewMode !== 'iso') return;   // 전환 중 입력 무시
+
     const speed = this._cam.zoom * 0.008;
 
     this._cam.target.x -= dx * speed;
@@ -274,12 +381,21 @@ export class WorldRenderer {
   }
 
   _onWheel(e) {
+    if (this.viewMode === 'fp') {
+      // 살짝의 FOV 조정만 (줌 인/아웃 없음)
+      this.fpCamera.fov = THREE.MathUtils.clamp(
+        this.fpCamera.fov + (e.deltaY > 0 ? 1.5 : -1.5), 45, 65);
+      this.fpCamera.updateProjectionMatrix();
+      return;
+    }
+    if (this.viewMode !== 'iso') return;
     const factor = e.deltaY > 0 ? 1.12 : 0.89;
     this._cam.targetZoom = Math.max(this._cam.minZoom,
       Math.min(this._cam.maxZoom, this._cam.targetZoom * factor));
   }
 
   _handleClick(clientX, clientY) {
+    if (this.viewMode !== 'iso') return;   // fp/전환 중에는 테이블 선택 비활성
     this._mouse.set(
       (clientX / window.innerWidth)  *  2 - 1,
       (clientY / window.innerHeight) * -2 + 1
@@ -300,6 +416,7 @@ export class WorldRenderer {
   // 마우스 거리가 HOVER_R px 이내인 가장 가까운 테이블을 선택
   _checkTableHover(clientX, clientY) {
     const { auth } = store.getState();
+    if (this.viewMode !== 'iso') { this._hideTableTooltip(); return; }
     if (!auth.isLoggedIn || !this._activeScene) { this._hideTableTooltip(); return; }
 
     const HOVER_R = 72; // 픽셀 반경
@@ -392,19 +509,133 @@ export class WorldRenderer {
     }
     setSeat(tableId, 0);
     multiplayerSim.refreshMyPosition();
-    showNotification('자리에 앉았어요! ☕', 'success');
+    showNotification('자리에 앉았어요! ☕ (좌하단 버튼으로 1인칭 전환)', 'success');
+  }
+
+  // ── 듀얼 카메라: 1인칭 착석 뷰로 다이브 ────────────────────
+  enterFirstPerson(tableId, seatIndex = 0) {
+    const tableData = this._activeScene?.tables?.get(tableId);
+    if (!tableData) return;
+    const seat = tableData.seats[seatIndex] ?? tableData.seats[0];
+    if (!seat) return;
+
+    // 착석 눈높이 — 테이블 건너편을 거의 수평으로 바라봄
+    const center = tableData.position;
+    const eye    = new THREE.Vector3(seat.worldX, 1.25, seat.worldZ);
+    // 시선 타겟: 테이블 중심 너머(건너편 좌석 방향)로 연장 → 맞은편 동석자/배경이 보임
+    const lookAt = new THREE.Vector3(
+      center.x + (center.x - seat.worldX) * 0.6,
+      1.12,   // 눈높이보다 살짝만 낮음 → 완만한 시선 (이전 0.85는 너무 아래)
+      center.z + (center.z - seat.worldZ) * 0.6,
+    );
+
+    // look-around 기준 yaw/pitch 저장 (테이블 정면)
+    const L = lookAt.clone().sub(eye);
+    this._fp.eye.copy(eye);
+    this._fp.baseYaw   = Math.atan2(L.x, L.z);
+    this._fp.basePitch = Math.atan2(L.y, Math.hypot(L.x, L.z));
+    this._fp.yaw = 0; this._fp.pitch = 0;
+
+    // 현재 iso 카메라 포즈에서 출발 → 착석 포즈로 보간
+    const fromPos    = this.isoCamera.position.clone();
+    const fromTarget = this._cam.target.clone();   // iso는 지면(target)을 바라봄
+    this._hideTableTooltip();
+    this.viewMode = 'transition';
+    setViewMode('fp');   // HUD가 즉시 fp로 반응 (힌트/툴팁 숨김)
+    this._updateViewToggleLabel();
+    this._camTween = {
+      t: 0, dur: 0.9, mode: 'enter',
+      fromPos, fromTarget, toPos: eye.clone(), toTarget: lookAt.clone(),
+      // 시작 FOV를 iso 직교 화각과 일치시켜 t=0 팝(pop) 제거
+      fovFrom: this._isoMatchFov(fromPos, fromTarget),
+      fovTo:   this.fpCamera.fov,
+    };
+  }
+
+  // ── 듀얼 카메라: 아이소 로비 뷰로 복귀 ─────────────────────
+  exitToIso() {
+    if (this.viewMode === 'iso') return;
+    // 현재 fp 포즈에서 출발 → iso 포즈로 보간
+    const fromPos    = this.camera.position.clone();
+    const fwd        = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const fromTarget = fromPos.clone().add(fwd.multiplyScalar(3));
+
+    const isoPose = this._isoPoseFor(this._cam.target);
+    this.viewMode = 'transition';
+    setViewMode('iso');
+    this._updateViewToggleLabel();
+    this._camTween = {
+      t: 0, dur: 0.9, mode: 'exit',
+      fromPos, fromTarget, toPos: isoPose.pos, toTarget: isoPose.target,
+      // 도착 FOV를 iso 직교 화각과 일치 → t=1 팝 제거
+      fovFrom: this.fpCamera.fov,
+      fovTo:   this._isoMatchFov(isoPose.pos, isoPose.target),
+    };
+  }
+
+  // iso 카메라의 (위치, 바라보는 지점) 계산 — 지면 target 기준
+  _isoPoseFor(target) {
+    return {
+      pos:    new THREE.Vector3(target.x + 9, 9, target.z + 9),
+      target: new THREE.Vector3(target.x, 0, target.z),
+    };
+  }
+
+  // 직교(iso) 화각을 근사하는 퍼스펙티브 수직 FOV(deg)
+  // 거리 D에서 화면 절반높이 = zoom 이 되는 FOV → 전환 시작/끝 프레이밍 일치
+  _isoMatchFov(pos, target) {
+    const D = Math.max(0.001, pos.distanceTo(target));
+    return THREE.MathUtils.radToDeg(2 * Math.atan(this._cam.zoom / D));
+  }
+
+  // fp 카메라에 현재 look-around yaw/pitch 적용
+  _applyFpCamera() {
+    const yaw   = this._fp.baseYaw   + this._fp.yaw;
+    const pitch = this._fp.basePitch + this._fp.pitch;
+    const cp = Math.cos(pitch);
+    const dir = new THREE.Vector3(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+    this.fpCamera.position.copy(this._fp.eye);
+    this.fpCamera.lookAt(this._fp.eye.clone().add(dir));
+  }
+
+  // fp 모드: 방향키/WASD로 시선 회전 (이동 없음 — 착석 상태)
+  _applyFpLook(delta) {
+    if (this.viewMode !== 'fp') return;
+    const tag = document.activeElement?.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+
+    const k = this._keys;
+    const sp = 1.5 * delta;   // rad/sec
+    let dy = 0, dp = 0;
+    if (k['a'] || k['A'] || k['ArrowLeft'])  dy += sp;
+    if (k['d'] || k['D'] || k['ArrowRight']) dy -= sp;
+    if (k['w'] || k['W'] || k['ArrowUp'])    dp += sp;
+    if (k['s'] || k['S'] || k['ArrowDown'])  dp -= sp;
+
+    if (dy || dp) {
+      this._fp.yaw   = THREE.MathUtils.clamp(this._fp.yaw   + dy, -FP_YAW_LIMIT, FP_YAW_LIMIT);
+      this._fp.pitch = THREE.MathUtils.clamp(this._fp.pitch + dp, -FP_PITCH_LIMIT, FP_PITCH_LIMIT);
+      this._applyFpCamera();
+    }
   }
 
   _onResize() {
     const W = window.innerWidth, H = window.innerHeight;
     this.renderer.setSize(W, H);
     this._updateCameraFrustum();
+    const aspect = W / H;
+    this.fpCamera.aspect = aspect;
+    this.fpCamera.updateProjectionMatrix();
+    this._transitionCam.aspect = aspect;
+    this._transitionCam.updateProjectionMatrix();
   }
 
   // ── 카메라 업데이트 ──────────────────────────────────────
   // 토로이달 랩핑: 한 방향으로 계속 이동하면 월드 경계를 넘어 반대편에서 나타남
   // → 카메라가 세계를 한 바퀴 돌면 시작 지점으로 돌아오는 진짜 무한 맵
   _updateCameraPosition() {
+    if (this.viewMode !== 'iso') return;   // fp/전환 중에는 iso 카메라 고정
     const { target } = this._cam;
 
     const span = this._activeScene?.gridSpan;
@@ -423,15 +654,44 @@ export class WorldRenderer {
     const aspect = window.innerWidth / window.innerHeight;
     const h = this._cam.zoom;
     const w = h * aspect;
-    this.camera.left   = -w;
-    this.camera.right  =  w;
-    this.camera.top    =  h;
-    this.camera.bottom = -h;
+    const cam = this.isoCamera;   // 항상 직교 로비 카메라 대상
+    cam.left   = -w;
+    cam.right  =  w;
+    cam.top    =  h;
+    cam.bottom = -h;
     // near/far를 zoom에 비례해 함께 갱신 — 줌 아웃 시 컬링 범위 확장
     // near 음수: 아이소메트릭 카메라 하단부 바닥이 뷰 뒤쪽에 위치하는 현상 대응
-    this.camera.near = -h * 12;
-    this.camera.far  =  h * 25;
-    this.camera.updateProjectionMatrix();
+    cam.near = -h * 12;
+    cam.far  =  h * 25;
+    cam.updateProjectionMatrix();
+  }
+
+  // ── 카메라 전환 보간 (animate 루프에서 매 프레임) ──────────
+  _updateCamTween(delta) {
+    const tw = this._camTween;
+    if (!tw) return;
+    tw.t = Math.min(1, tw.t + delta / tw.dur);
+    const k = easeInOut(tw.t);
+    this._transitionCam.position.copy(tw.fromPos.clone().lerp(tw.toPos, k));
+    this._transitionCam.lookAt(tw.fromTarget.clone().lerp(tw.toTarget, k));
+    // FOV도 함께 보간 → 직교↔퍼스펙티브 화각 변화가 매끄럽게 연결됨
+    this._transitionCam.fov = tw.fovFrom + (tw.fovTo - tw.fovFrom) * k;
+    this._transitionCam.updateProjectionMatrix();
+    this.camera = this._transitionCam;
+
+    if (tw.t >= 1) {
+      this._camTween = null;
+      if (tw.mode === 'enter') {
+        this.viewMode = 'fp';
+        this._applyFpCamera();
+        this.camera = this.fpCamera;
+      } else {
+        this.viewMode = 'iso';
+        this.camera = this.isoCamera;
+        this._updateCameraFrustum();
+        this._updateCameraPosition();
+      }
+    }
   }
 
   // ── 씬 로드 ─────────────────────────────────────────────
@@ -519,8 +779,13 @@ export class WorldRenderer {
       const delta = this._clock.getDelta();
       const now   = performance.now();
 
-      // 키보드 이동 (WASD + 방향키)
+      // 카메라 전환(iso↔fp) 보간 진행
+      this._updateCamTween(delta);
+
+      // 키보드 이동 (WASD + 방향키) — fp/전환 중 내부에서 무시됨
       this._applyKeyMovement(delta);
+      // fp 모드: 방향키/WASD 시선 회전
+      this._applyFpLook(delta);
 
       // 줌 스무딩 (targetZoom → zoom 보간)
       if (Math.abs(this._cam.zoom - this._cam.targetZoom) > 0.001) {
@@ -569,7 +834,10 @@ export class WorldRenderer {
 
   dispose() {
     this.stop();
+    this._unsubAuth?.();
     this._activeScene?.dispose();
+    this._viewToggleEl?.remove();
     this.renderer.dispose();
+    if (_instance === this) _instance = null;
   }
 }
