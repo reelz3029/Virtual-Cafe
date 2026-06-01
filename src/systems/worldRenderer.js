@@ -120,7 +120,7 @@ export class WorldRenderer {
     el.style.cssText = `
       position: fixed; display: none; z-index: 50;
       transform: translate(-50%, -100%);
-      pointer-events: auto;
+      pointer-events: none;
     `;
     el.innerHTML = `
       <style>
@@ -149,6 +149,7 @@ export class WorldRenderer {
         font-size: 12px; font-weight: 600;
         cursor: pointer; font-family: inherit;
         transition: background 0.15s;
+        pointer-events: auto;   /* 컨테이너 none이라 버튼만 클릭 가능하게 */
       }
       .btn-table-join:hover { background: #5A3E18; }
       .btn-table-join.sent  { background: #F0E8D4; color: #A07840; cursor: default; }
@@ -358,20 +359,39 @@ export class WorldRenderer {
   }
 
   _handleClick(clientX, clientY) {
-    if (this.viewMode !== 'iso') return;   // fp/전환 중에는 테이블 선택 비활성
+    if (this.viewMode !== 'iso') return;   // desk/전환 중에는 테이블 선택 비활성
+
+    // 1차: 정밀 레이캐스트
     this._mouse.set(
       (clientX / window.innerWidth)  *  2 - 1,
       (clientY / window.innerHeight) * -2 + 1
     );
     this._raycaster.setFromCamera(this._mouse, this.camera);
-
     const targets = this._activeScene?.getRaycastTargets() ?? [];
     const hits = this._raycaster.intersectObjects(targets, false);
-
-    if (hits.length > 0) {
-      const tableId = hits[0].object.userData.tableId;
-      if (tableId) this._onTableClick(tableId);
+    if (hits.length > 0 && hits[0].object.userData.tableId) {
+      this._onTableClick(hits[0].object.userData.tableId);
+      return;
     }
+
+    // 2차: 화면 근접 판정 (작은 테이블 상판 raycast 미스 보정)
+    const near = this._nearestTableByScreen(clientX, clientY, 90);
+    if (near) this._onTableClick(near);
+  }
+
+  // 클릭 좌표에서 화면상 가장 가까운 테이블 id (maxR px 이내)
+  _nearestTableByScreen(clientX, clientY, maxR = 90) {
+    if (!this._activeScene) return null;
+    const v = new THREE.Vector3();
+    let best = null, bestD = Infinity;
+    this._activeScene.tables.forEach((data, id) => {
+      v.set(data.position.x, 0.76, data.position.z).project(this.camera);
+      const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (v.y * -0.5 + 0.5) * window.innerHeight;
+      const d = Math.hypot(clientX - sx, clientY - sy);
+      if (d < maxR && d < bestD) { bestD = d; best = id; }
+    });
+    return best;
   }
 
   // ── 테이블 hover 감지 (2D 근접 판정) ────────────────────
