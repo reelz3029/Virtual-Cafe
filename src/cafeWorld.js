@@ -60,6 +60,7 @@ export class CafeWorld {
     // 시점: 'iso' | 'desk' | 'fp'(1인칭)
     this._view = 'iso';
     this._mySeat = null;       // { x, z, baseYaw } — 1인칭 기준 좌석
+    this._myCatObj = null;     // 내 캐릭터(1인칭에서 시선 따라 회전)
     this._fpYaw = 0; this._fpPitch = 0;
     this._dragging = false;
 
@@ -382,6 +383,7 @@ export class CafeWorld {
       c.material?.dispose?.();
     }
     this._cats = this._baristaCat ? [this._baristaCat] : [];
+    this._myCatObj = null;   // 재구성되므로 참조 초기화
 
     const list = players.slice(0, TABLES.length * SEATS_PER);
     // 분위기 보강: 혼자/소수일 때 더미 캐릭터 약간 추가
@@ -412,6 +414,7 @@ export class CafeWorld {
       if (p.id === this._myId) {
         this._myTableIdx = tableIdx;
         this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
+        this._myCatObj = inst;
       }
     });
   }
@@ -427,6 +430,10 @@ export class CafeWorld {
         this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
       }
       return;
+    }
+    // 1인칭에서 빠져나오면 내 캐릭터를 다시 테이블 쪽으로
+    if (this._myCatObj && this._mySeat) {
+      this._myCatObj.rotation.y = this._mySeat.baseYaw + CAT_FACE;
     }
     if (mode === 'desk') {
       const t = TABLES[this._myTableIdx] || TABLES[0];
@@ -483,7 +490,14 @@ export class CafeWorld {
       const yaw = s.baseYaw + this._fpYaw, pitch = this._fpPitch;
       const cp = Math.cos(pitch);
       const dir = new THREE.Vector3(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
-      const eye = new THREE.Vector3(s.x, SEAT_Y + 0.9, s.z);
+      // 내 캐릭터 몸통을 시선(수평)으로 회전 — 자연스럽게 같이 돌게
+      if (this._myCatObj) this._myCatObj.rotation.y = yaw + CAT_FACE;
+      // 카메라: 머리 높이에서 시선 전방으로 살짝 빼 모델에 안 파묻히게
+      const headY = SEAT_Y + CAT_HEIGHT * 0.86;     // 머리 부근
+      const fwd = 0.55;                             // 얼굴 앞으로
+      const eye = new THREE.Vector3(
+        s.x + Math.sin(yaw) * fwd, headY, s.z + Math.cos(yaw) * fwd,
+      );
       this.camera.position.copy(eye);
       this.camera.lookAt(eye.clone().add(dir));
       this._camPos.copy(eye);                 // 복귀 시 보간 연속성
