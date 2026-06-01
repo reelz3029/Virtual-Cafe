@@ -19,6 +19,9 @@ const CAT_GLB     = '/models/cute_cat_in_cute_banana.glb';
 const CAT_HEIGHT  = 1.25;   // 목표 높이(월드 유닛)
 const CAT_FACE    = 0;      // 모델 정면 보정각(필요시 Math.PI로 뒤집기)
 
+const BASE_FOV = 34;        // 둘러보기/내 자리
+const FP_FOV   = 62;        // 1인칭(넓게 — 확대감 완화)
+
 const C = {
   floor1: 0xC9A06A, floor2: 0xB8895C, wall: 0xD9B98C, wallBack: 0xCBA877,
   beam: 0x5A3E28, shelf: 0x6B4A2E,
@@ -92,7 +95,7 @@ export class CafeWorld {
 
   // ── 카메라 (퍼스펙티브 아이소) ────────────────────────────
   _initCamera() {
-    this.camera = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 100);
     this.ISO_POS = new THREE.Vector3(15, 10, 15);
     this.ISO_TGT = new THREE.Vector3(0, 1.5, 0);
     this.camera.position.copy(this.ISO_POS);
@@ -385,13 +388,17 @@ export class CafeWorld {
     this._cats = this._baristaCat ? [this._baristaCat] : [];
     this._myCatObj = null;   // 재구성되므로 참조 초기화
 
-    const list = players.slice(0, TABLES.length * SEATS_PER);
+    // 모든 클라이언트가 동일한 좌석 배정을 갖도록 id 기준 전역 정렬
+    // (자기 자신을 앞에 두면 전원이 같은 자리에 고정되는 버그 방지)
+    const sorted = players
+      .slice(0, TABLES.length * SEATS_PER)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // 분위기 보강: 혼자/소수일 때 더미 캐릭터 약간 추가
-    const ambiance = list.length <= 1
+    const ambiance = sorted.length <= 1
       ? [{ id: '__amb1', name: '단골' }, { id: '__amb2', name: '책벌레' }]
       : [];
 
-    [...list, ...ambiance].forEach((p, gi) => {
+    [...sorted, ...ambiance].forEach((p, gi) => {
       const tableIdx = Math.floor(gi / SEATS_PER) % TABLES.length;
       const seatIdx = gi % SEATS_PER;
       const t = TABLES[tableIdx];
@@ -429,12 +436,16 @@ export class CafeWorld {
         const x = t.x + Math.cos(ang) * SEAT_R, z = t.z + Math.sin(ang) * SEAT_R;
         this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
       }
+      this.camera.fov = FP_FOV;          // 넓게 (확대감 완화)
+      this.camera.updateProjectionMatrix();
       return;
     }
-    // 1인칭에서 빠져나오면 내 캐릭터를 다시 테이블 쪽으로
+    // 1인칭에서 빠져나오면 내 캐릭터를 다시 테이블 쪽으로 + FOV 복귀
     if (this._myCatObj && this._mySeat) {
       this._myCatObj.rotation.y = this._mySeat.baseYaw + CAT_FACE;
     }
+    this.camera.fov = BASE_FOV;
+    this.camera.updateProjectionMatrix();
     if (mode === 'desk') {
       const t = TABLES[this._myTableIdx] || TABLES[0];
       this._tgtPos = new THREE.Vector3(t.x + 3.7, 6.5, t.z + 7.7);
