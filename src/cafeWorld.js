@@ -20,7 +20,13 @@ const CAT_HEIGHT  = 1.25;   // 목표 높이(월드 유닛)
 const CAT_FACE    = 0;      // 모델 정면 보정각(필요시 Math.PI로 뒤집기)
 
 const BASE_FOV = 34;        // 둘러보기/내 자리
-const FP_FOV   = 62;        // 1인칭(넓게 — 확대감 완화)
+const FP_FOV   = 75;        // 1인칭(넓게 — 확대감 완화)
+
+// 에스프레소 머신 GLB (파일명 오타 'Macnine' 그대로)
+const COFFEE_GLB  = '/models/CoffeeMacnine_Small.glb';
+const MACHINE_H   = 0.85;   // 목표 높이
+const MACHINE_POS = { x: 5.3, y: 2.2, z: -4 };  // 카운터 윗면
+const MACHINE_FACE = Math.PI / 2;  // 정면이 실내를 향하도록(필요시 조정)
 
 const C = {
   floor1: 0xC9A06A, floor2: 0xB8895C, wall: 0xD9B98C, wallBack: 0xCBA877,
@@ -35,8 +41,8 @@ const TABLES = [
   { x: -3, z: -1 }, { x: 1, z: -1 }, { x: -3, z: 3 }, { x: 1, z: 3 },
 ];
 const SEATS_PER = 4;
-const SEAT_R = 1.5;
-const SEAT_Y = 0.5;    // 의자 좌석 높이 (캐릭터가 여기 앉음)
+const SEAT_R = 1.6;
+const SEAT_Y = 0.7;    // 의자 좌석 높이 (캐릭터가 여기 앉음)
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -73,6 +79,7 @@ export class CafeWorld {
     this._buildRoom();
     this.scene.add(this._catGroup);
     this._loadCatModel();
+    this._loadCoffeeMachine();
     this._bindInput();
 
     this._clock = new THREE.Clock();
@@ -205,12 +212,9 @@ export class CafeWorld {
     cBody.position.y = 1; cBody.castShadow = true; counter.add(cBody);
     const cTop = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.2, 1.9), mat(C.counterTop));
     cTop.position.y = 2.1; counter.add(cTop);
-    const machine = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.8), mat(0x8FA89A));
-    machine.position.set(-1, 2.7, 0); machine.castShadow = true; counter.add(machine);
-    const mTop = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.5), mat(0xC8C4BC));
-    mTop.position.set(-1, 3.4, 0); counter.add(mTop);
     counter.position.set(4.5, 0, -4); room.add(counter);
     this._counterPos = new THREE.Vector3(4.5, 0, -4);
+    // 에스프레소 머신은 GLB 로 카운터 위에 배치 (_loadCoffeeMachine)
 
     // 펜던트 조명
     this._buildPendant(room, -1, 0);
@@ -357,6 +361,54 @@ export class CafeWorld {
     return inst;
   }
 
+  // ── 에스프레소 머신 GLB (따뜻한 브라스/우드 머테리얼) ──────
+  _loadCoffeeMachine() {
+    new GLTFLoader().load(COFFEE_GLB, (gltf) => {
+      const model = gltf.scene;
+
+      // 머테리얼: 원본 밝기별로 황혼 카페에 맞는 브라스/크림/우드로 매핑
+      model.traverse(o => {
+        if (!o.isMesh || !o.material) return;
+        o.castShadow = true; o.receiveShadow = true;
+        const src = Array.isArray(o.material) ? o.material : [o.material];
+        const mapped = src.map(m => {
+          const hsl = { h: 0, s: 0, l: 0 };
+          (m.color ?? new THREE.Color(0.5, 0.5, 0.5)).getHSL(hsl);
+          let color, metalness, roughness;
+          if (hsl.l > 0.62) {            // 밝은 부분 → 웜 크림 크롬
+            color = 0xEAD9BE; metalness = 0.45; roughness = 0.32;
+          } else if (hsl.l > 0.33) {     // 본체 → 브라스/카퍼
+            color = 0xC0894A; metalness = 0.5; roughness = 0.38;
+          } else {                       // 어두운 부분/베이스 → 다크 월넛
+            color = 0x4A3320; metalness = 0.2; roughness = 0.6;
+          }
+          return new THREE.MeshStandardMaterial({
+            color, metalness, roughness, map: m.map ?? null,
+          });
+        });
+        o.material = Array.isArray(o.material) ? mapped : mapped[0];
+      });
+
+      // 정규화: 목표 높이로 스케일, x/z 중심정렬, 바닥 y=0
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      model.scale.setScalar(MACHINE_H / (size.y || 1));
+      const box2 = new THREE.Box3().setFromObject(model);
+      const c = box2.getCenter(new THREE.Vector3());
+      model.position.x -= c.x;
+      model.position.z -= c.z;
+      model.position.y -= box2.min.y;
+
+      const holder = new THREE.Group();
+      holder.add(model);
+      holder.position.set(MACHINE_POS.x, MACHINE_POS.y, MACHINE_POS.z);
+      holder.rotation.y = MACHINE_FACE;
+      this.scene.add(holder);
+    }, undefined, (err) => {
+      console.error('[CafeWorld] 커피머신 GLB 로드 실패:', err);
+    });
+  }
+
   // ── 카운터 바리스타 (상시 NPC) ───────────────────────────
   _placeBarista() {
     if (!this._catBase) return;
@@ -460,7 +512,7 @@ export class CafeWorld {
 
   // ── 1인칭 입력 (마우스 드래그 + 방향키로 좌우·상하 둘러보기) ──
   _bindInput() {
-    const YAW_LIM = 1.6, PITCH_LIM = 0.7;
+    const YAW_LIM = 3, PITCH_LIM = 0.7;
     const el = this.renderer.domElement;
 
     this._onDown = (e) => { this._dragging = true; this._lx = e.clientX; this._ly = e.clientY; };
