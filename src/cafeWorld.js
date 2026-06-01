@@ -97,7 +97,7 @@ export class CafeWorld {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x3a2418, 22, 48);
 
-    this.ambient = new THREE.AmbientLight(0xFFE0B0, 0.55);
+    this.ambient = new THREE.AmbientLight(0xFFE0B0, 0.68);
     this.scene.add(this.ambient);
 
     this.sun = new THREE.DirectionalLight(0xFF9D4D, 2.4);
@@ -121,7 +121,7 @@ export class CafeWorld {
     this.scene.add(bulb);
 
     // 황혼/주간 보간용 색
-    this.SUN_SUNSET = { col: new THREE.Color(0xFF9D4D), int: 2.4, amb: new THREE.Color(0xFFE0B0), ambI: 0.55, bg: new THREE.Color(0x3a2418), win: new THREE.Color(0xFFCB85) };
+    this.SUN_SUNSET = { col: new THREE.Color(0xFF9D4D), int: 2.4, amb: new THREE.Color(0xFFE0B0), ambI: 0.68, bg: new THREE.Color(0x3a2418), win: new THREE.Color(0xFFCB85) };
     this.SUN_DAY    = { col: new THREE.Color(0xFFF0D8), int: 1.7, amb: new THREE.Color(0xFFF4E2), ambI: 0.85, bg: new THREE.Color(0xBFA988), win: new THREE.Color(0xEAF2FF) };
   }
 
@@ -141,8 +141,20 @@ export class CafeWorld {
     // 벽 2면
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(FLOOR, 9, 0.4), mat(C.wallBack));
     backWall.position.set(0, 4.5, -FLOOR / 2); backWall.receiveShadow = true; room.add(backWall);
-    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9, FLOOR), mat(C.wall));
-    leftWall.position.set(-FLOOR / 2, 4.5, 0); leftWall.receiveShadow = true; room.add(leftWall);
+    // 좌벽 — 창 개구부(hole)를 남기고 4조각으로: 진짜로 뚫어 빛이 들어오게
+    //   개구부: z ∈ [-3, 5] (폭 8), y ∈ [2, 7] (높이 5)
+    const LX = -FLOOR / 2;
+    const wallSeg = (h, d, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, h, d), mat(C.wall));
+      m.position.set(LX, y, z);
+      m.castShadow = true;        // 개구부로 들어온 햇빛이 바닥에 빛 기둥을 만들도록
+      m.receiveShadow = true;
+      room.add(m);
+    };
+    wallSeg(2, FLOOR, 1, 0);      // 하단 띠 (y 0~2)
+    wallSeg(2, FLOOR, 8, 0);      // 상단 띠 (y 7~9)
+    wallSeg(5, 5, 4.5, -5.5);     // 개구부 앞쪽 (z -8~-3)
+    wallSeg(5, 3, 4.5, 6.5);      // 개구부 뒤쪽 (z 5~8)
 
     // 천장 보
     for (let i = 0; i < 5; i++) {
@@ -150,27 +162,35 @@ export class CafeWorld {
       beam.position.set(0, 8.6, -6 + i * 3); room.add(beam);
     }
 
-    // 큰 창 (황혼빛 발광면)
-    this.windowGlow = new THREE.Mesh(
-      new THREE.PlaneGeometry(8, 5),
-      new THREE.MeshBasicMaterial({ color: 0xFFCB85, transparent: true, opacity: 0.92 }),
+    // 개구부 바깥 — 진짜로 보이는 하늘/노을 (발광 배경, fog 제외) + 먼 실루엣
+    const sky = new THREE.Mesh(
+      new THREE.PlaneGeometry(24, 16),
+      new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.DoubleSide, fog: false }),
     );
-    this.windowGlow.rotation.y = Math.PI / 2;
-    this.windowGlow.position.set(-FLOOR / 2 + 0.25, 4.5, 1);
-    room.add(this.windowGlow);
-    // 창틀 (가로/세로)
-    const frameMat = mat(0x4A3320);
-    const addFrame = (geo, y, z) => {
-      const f = new THREE.Mesh(geo, frameMat);
-      f.rotation.y = Math.PI / 2;
-      f.position.set(-FLOOR / 2 + 0.3, y, z);
-      room.add(f);
+    sky.rotation.y = Math.PI / 2;     // 좌벽과 평행, 실내를 향함
+    sky.position.set(LX - 7, 5, 1);
+    room.add(sky);
+    this.windowGlow = sky;            // 황혼/주간 토글이 하늘 색을 틴트
+
+    // 먼 건물/지붕 실루엣 (창밖 풍경)
+    [[-3.5, 2.4, 3.5], [0.6, 3.4, 3.0], [4.2, 1.8, 4.0]].forEach(([z, h, w]) => {
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, h, w),
+        new THREE.MeshBasicMaterial({ color: 0x7A5640, fog: false }),
+      );
+      b.position.set(LX - 3.8, h / 2 + 0.4, z);
+      room.add(b);
+    });
+    // 얇은 창 가장자리 프레임(개구부 테두리만 — 유리는 없음)
+    const edgeMat = mat(0x4A3320);
+    const edge = (h, d, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.18, h, d), edgeMat);
+      m.position.set(LX, y, z); room.add(m);
     };
-    addFrame(new THREE.BoxGeometry(0.3, 0.3, 8.4), 7.0, 1);    // 위 가로
-    addFrame(new THREE.BoxGeometry(0.3, 0.3, 8.4), 2.0, 1);    // 아래 가로
-    addFrame(new THREE.BoxGeometry(0.3, 5.4, 0.3), 4.5, -3);   // 세로
-    addFrame(new THREE.BoxGeometry(0.3, 5.4, 0.3), 4.5, 1);    // 세로 중앙
-    addFrame(new THREE.BoxGeometry(0.3, 5.4, 0.3), 4.5, 5);    // 세로
+    edge(0.18, 8, 2.05, 1);   // 하단 테두리
+    edge(0.18, 8, 6.95, 1);   // 상단 테두리
+    edge(5, 0.18, 4.5, -2.95); // 앞 세로
+    edge(5, 0.18, 4.5, 4.95);  // 뒤 세로
 
     // 책장 2개
     this._buildBookshelf(room, -4);
@@ -461,6 +481,21 @@ function drawItem(x, cx, item) {
     x.beginPath(); x.rect(cx - 12, 100, 24, 12); x.fill(); x.stroke();
     x.strokeStyle = '#7B8B5A'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(cx - 7, 107); x.lineTo(cx + 2, 102); x.lineTo(cx + 8, 108); x.stroke();
   }
+}
+
+// 창밖 하늘 그라디언트 (위 노을 → 아래 따뜻한 크림)
+function makeSkyTexture() {
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 256;
+  const x = cv.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#E87A3E');   // 상단 진한 노을
+  g.addColorStop(0.45, '#FFB066');
+  g.addColorStop(0.8, '#FFD9A0');
+  g.addColorStop(1.0, '#FFE9C8');   // 지평선 근처 밝게
+  x.fillStyle = g; x.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
 }
 
 function nameTag(name) {
