@@ -104,7 +104,7 @@ export class CafeScene {
     this.scene.traverse(obj => {
       if (!obj.isMesh) return;
       obj.frustumCulled = false;
-      obj.castShadow = true;
+      obj.castShadow = !obj.userData.noCast;
       obj.receiveShadow = true;
     });
   }
@@ -180,12 +180,13 @@ export class CafeScene {
     leftWall.position.set(-ROOM_HALF, WALL_H / 2, 0);
     this.scene.add(leftWall);
 
-    // 천장 보 — 다락 느낌
-    for (let i = 0; i < 5; i++) {
+    // 천장 보 — 얇고 높게 (화면 가리지 않게)
+    for (let i = 0; i < 4; i++) {
       const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(ROOM_HALF * 2, 0.4, 0.45), mat(C.beam)
+        new THREE.BoxGeometry(ROOM_HALF * 2, 0.18, 0.22), mat(C.beam)
       );
-      beam.position.set(0, WALL_H - 0.5, -ROOM_HALF + 1.8 + i * 3.2);
+      beam.position.set(0, WALL_H - 0.25, -ROOM_HALF + 2.4 + i * 3.6);
+      beam.userData.noCast = true;   // 굵은 그림자 방지 (일괄설정 제외)
       this.scene.add(beam);
     }
 

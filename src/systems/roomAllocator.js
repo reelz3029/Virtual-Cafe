@@ -88,16 +88,29 @@ class RoomAllocator {
     }
 
     // 1. 현재 방별 카운트 스냅샷 읽기
-    const snap = await get(ref(this._db, `roomCounts/${base}`));
-    this._counts = snap.val() || {};
+    //    roomCounts 보안 규칙이 없거나 네트워크 오류면 permission-denied 등으로
+    //    throw → 단일 방(room0)으로 폴백해 입장 자체는 깨지지 않게 한다.
+    try {
+      const snap = await get(ref(this._db, `roomCounts/${base}`));
+      this._counts = snap.val() || {};
+    } catch (e) {
+      console.warn('[RoomAllocator] roomCounts 읽기 실패 — 단일 방 폴백:', e?.message);
+      this._roomId = 'room0';
+      return { roomId: 'room0', scene: sceneKey(base, 'room0'), mood: moodForRoom('room0') };
+    }
 
     // 2. "채우기 우선" — 안 꽉 찬 방 중 가장 많이 찬 방
     const chosen = this._pickRoom();
 
-    // 3. 카운터 +1 (transaction 으로 경쟁 방지)
+    // 3. 카운터 +1 (transaction 으로 경쟁 방지) — 실패해도 입장은 진행
     this._roomId = chosen;
     this._myCountRef = ref(this._db, `roomCounts/${base}/${chosen}`);
-    await runTransaction(this._myCountRef, cur => (cur || 0) + 1);
+    try {
+      await runTransaction(this._myCountRef, cur => (cur || 0) + 1);
+    } catch (e) {
+      console.warn('[RoomAllocator] 카운터 +1 실패 (무시):', e?.message);
+      this._myCountRef = null;
+    }
 
     // 4. 비정상 종료/탭 닫힘 시 카운터 자동 -1
     onDisconnect(this._myCountRef).set(
