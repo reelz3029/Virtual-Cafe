@@ -55,7 +55,7 @@ export function createCharacterSprite(avatar = {}, username = '', opts = {}) {
     map: texture, transparent: true, depthWrite: false, alphaTest: 0.01,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.72, 0.92, 1);
+  sprite.scale.set(0.88, 1.12, 1);   // 멀리서도 번 고양이가 잘 보이게
   sprite.userData.username = username;
   return sprite;
 }

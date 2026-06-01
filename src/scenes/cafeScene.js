@@ -180,13 +180,13 @@ export class CafeScene {
     leftWall.position.set(-ROOM_HALF, WALL_H / 2, 0);
     this.scene.add(leftWall);
 
-    // 천장 보 — 얇고 높게 (화면 가리지 않게)
-    for (let i = 0; i < 4; i++) {
+    // 천장 보 — 얇고, 뒤쪽(책장/카운터 위)에만 3개. 앞 좌석 위는 비워 시야 확보
+    for (let i = 0; i < 3; i++) {
       const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(ROOM_HALF * 2, 0.18, 0.22), mat(C.beam)
+        new THREE.BoxGeometry(ROOM_HALF * 2, 0.16, 0.2), mat(C.beam)
       );
-      beam.position.set(0, WALL_H - 0.25, -ROOM_HALF + 2.4 + i * 3.6);
-      beam.userData.noCast = true;   // 굵은 그림자 방지 (일괄설정 제외)
+      beam.position.set(0, WALL_H - 0.22, -ROOM_HALF + 1.6 + i * 2.0);
+      beam.userData.noCast = true;   // 그림자 제외
       this.scene.add(beam);
     }
 
@@ -564,7 +564,7 @@ export class CafeScene {
     group.add(sprite);
 
     const nameTag = createNameTag(username, isMe);
-    nameTag.position.y = 1.08;
+    nameTag.position.y = 1.22;
     group.add(nameTag);
 
     if (heldCoffee) {

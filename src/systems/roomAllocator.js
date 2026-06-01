@@ -19,7 +19,7 @@
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
-  getDatabase, ref, onValue, runTransaction, onDisconnect, get,
+  getDatabase, ref, onValue, runTransaction, get,
 } from 'firebase/database';
 import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebaseConfig.js';
 
@@ -112,14 +112,9 @@ class RoomAllocator {
       this._myCountRef = null;
     }
 
-    // 4. 비정상 종료/탭 닫힘 시 카운터 자동 -1
-    onDisconnect(this._myCountRef).set(
-      // onDisconnect 는 함수 트랜잭션을 못 받으므로, 별도 감산 ref 사용
-      // → 여기서는 단순화를 위해 leave() 의 정상 감산에 의존하고,
-      //   onDisconnect 는 presence 가 책임진다. (카운터는 셀프 힐링 가능)
-      undefined
-    );
-    // 주: onDisconnect 트랜잭션 한계로, 카운터 드리프트는 _reconcile() 로 보정
+    // 4. 비정상 종료 보정: onDisconnect 트랜잭션이 불가하므로 호출하지 않는다.
+    //    (set(undefined)/null ref 는 동기 예외 → allocate 가 죽어 presence 등록까지
+    //     막혔던 버그.) 카운터 드리프트는 _syncUsers 의 reconcile() 셀프 힐링으로 수렴.
 
     return {
       roomId: chosen,
@@ -175,19 +170,20 @@ class RoomAllocator {
 
     const ref_ = ref(this._db, `roomCounts/${this._base}/${this._roomId}`);
     // 카운터가 실제보다 크게 벌어졌을 때만 보정 (쓰기 경쟁 최소화)
+    // 규칙 미설정 등으로 거부돼도 조용히 무시 (입장/착석에는 영향 없음)
     runTransaction(ref_, cur => {
       const c = cur || 0;
-      // 실제 인원과 2 이상 차이날 때만 실제값으로 끌어내림/올림
       if (Math.abs(c - realCount) >= 2) return realCount;
-      return cur; // 변경 없음
-    });
+      return cur;
+    }).catch(() => {});
   }
 
   /** 퇴장 — 카운터 -1 */
   async leave() {
     if (this._myCountRef) {
-      await runTransaction(this._myCountRef, cur => Math.max(0, (cur || 0) - 1));
+      const r = this._myCountRef;
       this._myCountRef = null;
+      try { await runTransaction(r, cur => Math.max(0, (cur || 0) - 1)); } catch {}
     }
     this._countsUnsub?.();
     this._countsUnsub = null;
