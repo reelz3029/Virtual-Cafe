@@ -3,92 +3,129 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>☕ Somewhere — 고양이 카페</title>
+  <title>☕ Somewhere — 해질녘 책방 카페</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <link rel="stylesheet" href="/src/styles/loading.css" />
   <style>
-    /* "움직이는 일러스트" 질감 — 3D 캔버스 위, UI(z>=10) 아래 */
-    #grain, #vignette { position: fixed; inset: 0; pointer-events: none; }
-    /* 따뜻한 비네트 — 가장자리 자연스러운 어두움 */
-    #vignette {
-      z-index: 3;
-      background: radial-gradient(ellipse at 50% 42%,
-        transparent 50%, rgba(60,28,10,0.28) 100%);
-    }
-    /* 종이 grain — fractalNoise, multiply 블렌드 */
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body { height:100%; overflow:hidden; }
+    body { font-family:'DM Sans',sans-serif; background:#1a1410; }
+    #app { position:fixed; inset:0; }
+    canvas { display:block; }
+
+    /* 종이 grain — 컨셉 핵심 */
     #grain {
-      z-index: 4; opacity: 0.38; mix-blend-mode: multiply;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+      position:fixed; inset:0; pointer-events:none; z-index:5;
+      opacity:.42; mix-blend-mode:multiply;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
     }
+    /* 따뜻한 비네트 */
+    #vignette {
+      position:fixed; inset:0; pointer-events:none; z-index:4;
+      background:radial-gradient(ellipse at 50% 42%, transparent 50%, rgba(60,28,10,0.34) 100%);
+    }
+
+    .ui { position:fixed; z-index:10; pointer-events:none; }
+    .ui > * { pointer-events:auto; }
+
+    #topbar {
+      top:18px; left:50%; transform:translateX(-50%);
+      display:flex; align-items:center; gap:12px;
+      background:rgba(40,26,16,0.55); backdrop-filter:blur(14px) saturate(1.2);
+      border:1px solid rgba(255,210,150,0.18);
+      border-radius:16px; padding:9px 16px;
+      box-shadow:0 8px 30px rgba(0,0,0,.35);
+    }
+    .logo { font-family:'Gowun Batang',serif; font-weight:700; font-size:16px; color:#FFE6C2; letter-spacing:.01em; }
+    .dot { width:7px;height:7px;border-radius:50%;background:#E89B4C;box-shadow:0 0 8px #E89B4C; animation:pulse 2.4s infinite; }
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .meta { font-size:12.5px; color:#E8C49A; }
+    .divider { width:1px; height:16px; background:rgba(255,210,150,0.2); }
+    .btn-logout {
+      background:transparent; border:none; color:#C49A6A; cursor:pointer;
+      font-family:inherit; font-size:12px; padding:2px 4px; transition:color .15s;
+    }
+    .btn-logout:hover { color:#FFE6C2; }
+
+    #caption { bottom:88px; left:50%; transform:translateX(-50%); text-align:center; max-width:90vw; }
+    #caption .title { font-family:'Gowun Batang',serif; font-size:18px; color:#FFE6C2; text-shadow:0 2px 10px rgba(0,0,0,.5); margin-bottom:4px; }
+    #caption .desc { font-size:12.5px; color:#D6B894; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+
+    #controls {
+      bottom:20px; left:50%; transform:translateX(-50%);
+      display:flex; gap:8px;
+      background:rgba(40,26,16,0.55); backdrop-filter:blur(14px);
+      border:1px solid rgba(255,210,150,0.18);
+      border-radius:16px; padding:8px 10px;
+    }
+    .vbtn {
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:8px 16px; border:none; border-radius:11px;
+      background:transparent; color:#E8C49A; cursor:pointer;
+      font-family:inherit; font-size:11px; font-weight:500; transition:all .15s;
+    }
+    .vbtn:hover { background:rgba(255,210,150,0.12); transform:translateY(-1px); }
+    .vbtn.active { background:rgba(232,155,76,0.22); color:#FFE6C2; }
+    .vbtn .ic { font-size:18px; }
+
+    #timeLabel {
+      top:74px; left:50%; transform:translateX(-50%);
+      font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+      color:#C49A6A; text-shadow:0 1px 4px rgba(0,0,0,.5);
+    }
+    .ui.hidden { display:none; }
+
+    #loading {
+      position:fixed; inset:0; z-index:200; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:14px;
+      background:#1a1410; color:#E8C49A; transition:opacity .6s;
+    }
+    #loading .ld-logo { font-family:'Gowun Batang',serif; font-size:24px; color:#FFE6C2; }
+    #loading .ld-sub { font-size:12.5px; color:#A8855C; }
+    .ld-dots { display:flex; gap:6px; }
+    .ld-dots i { width:8px;height:8px;border-radius:50%;background:#E89B4C; animation:ld 1.2s infinite; }
+    .ld-dots i:nth-child(2){animation-delay:.2s} .ld-dots i:nth-child(3){animation-delay:.4s}
+    @keyframes ld{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
   </style>
 </head>
 <body>
-  <canvas id="world-canvas"></canvas>
+  <div id="app"></div>
   <div id="vignette"></div>
   <div id="grain"></div>
-  <div id="overlay"></div>
+
+  <!-- 상단바 -->
+  <div class="ui" id="topbar">
+    <span class="logo">☕ Somewhere</span>
+    <div class="divider"></div>
+    <span class="dot"></span>
+    <span class="meta" id="onlineCount">입장 중…</span>
+    <div class="divider"></div>
+    <button class="btn-logout" id="btn-logout">로그아웃</button>
+  </div>
+
+  <div class="ui" id="timeLabel">☀ 해질녘 5:47 PM ☀</div>
+
+  <div class="ui" id="caption">
+    <div class="title">해질녘 책방 카페</div>
+    <div class="desc">각자의 사물에 몰입한 고양이들 · 단면 인형의집 구조 · 종이질감 오버레이</div>
+  </div>
+
+  <!-- 시점 컨트롤 -->
+  <div class="ui" id="controls">
+    <button class="vbtn active" data-view="iso"><span class="ic">🛋</span>둘러보기</button>
+    <button class="vbtn" data-view="desk"><span class="ic">📖</span>내 자리</button>
+    <button class="vbtn" data-view="sunset"><span class="ic">🌇</span>노을 토글</button>
+  </div>
+
+  <!-- 로그인 모달이 마운트되는 곳 -->
   <div id="ui-root"></div>
 
-  <div id="loading-screen">
-    <!-- 고양이 일러스트 — 치비 라인아트 스타일 -->
-    <div class="loading-cat-wrap">
-      <svg width="120" height="132" viewBox="0 0 120 132" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- 그림자 -->
-        <ellipse cx="55" cy="125" rx="23" ry="5" fill="rgba(120,80,30,0.13)"/>
-        <!-- 꼬리 (흔들림 애니메이션) -->
-        <g class="cat-tail">
-          <path d="M70 102 Q96 86 86 64" stroke="#D4C4A8" stroke-width="11" stroke-linecap="round" fill="none"/>
-          <path d="M70 102 Q96 86 86 64" stroke="#F5EDD8" stroke-width="6.5" stroke-linecap="round" fill="none"/>
-        </g>
-        <!-- 왼쪽 귀 -->
-        <ellipse cx="27" cy="26" rx="14" ry="18" fill="#D4C4A8" transform="rotate(-14 27 26)"/>
-        <ellipse cx="27" cy="26" rx="11" ry="14.5" fill="#F5EDD8" transform="rotate(-14 27 26)"/>
-        <ellipse cx="27" cy="28" rx="6" ry="8.5" fill="#FFD4CC" transform="rotate(-14 27 26)"/>
-        <!-- 오른쪽 귀 -->
-        <ellipse cx="83" cy="26" rx="14" ry="18" fill="#D4C4A8" transform="rotate(14 83 26)"/>
-        <ellipse cx="83" cy="26" rx="11" ry="14.5" fill="#F5EDD8" transform="rotate(14 83 26)"/>
-        <ellipse cx="83" cy="28" rx="6" ry="8.5" fill="#FFD4CC" transform="rotate(14 83 26)"/>
-        <!-- 머리 -->
-        <circle cx="55" cy="57" r="33" fill="#D4C4A8"/>
-        <circle cx="55" cy="56" r="31" fill="#F5EDD8"/>
-        <!-- 몸통 -->
-        <ellipse cx="55" cy="101" rx="27" ry="25" fill="#D4C4A8"/>
-        <ellipse cx="55" cy="100" rx="25" ry="23" fill="#F5EDD8"/>
-        <!-- 앞발 -->
-        <ellipse cx="35" cy="116" rx="13" ry="8.5" fill="#D4C4A8"/>
-        <ellipse cx="35" cy="115" rx="11" ry="7" fill="#F5EDD8"/>
-        <ellipse cx="75" cy="116" rx="13" ry="8.5" fill="#D4C4A8"/>
-        <ellipse cx="75" cy="115" rx="11" ry="7" fill="#F5EDD8"/>
-        <!-- 눈 (큰 동그란 치비 눈) -->
-        <circle cx="43" cy="55" r="9" fill="#1A1010"/>
-        <circle cx="45" cy="51" r="3" fill="white"/>
-        <circle cx="67" cy="55" r="9" fill="#1A1010"/>
-        <circle cx="69" cy="51" r="3" fill="white"/>
-        <!-- 코 -->
-        <path d="M51 67 L55 72 L59 67 Z" fill="#E08090"/>
-        <!-- 입 -->
-        <path d="M50 72 Q55 78 60 72" stroke="rgba(90,50,20,0.65)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        <!-- 볼터치 -->
-        <ellipse cx="32" cy="66" rx="10" ry="5.5" fill="rgba(240,140,125,0.26)"/>
-        <ellipse cx="78" cy="66" rx="10" ry="5.5" fill="rgba(240,140,125,0.26)"/>
-        <!-- 수염 -->
-        <line x1="3"  y1="64" x2="36" y2="67" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="3"  y1="71" x2="36" y2="71" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="107" y1="64" x2="74" y2="67" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="107" y1="71" x2="74" y2="71" stroke="rgba(100,70,40,0.42)" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
-    </div>
-
-    <div class="loading-logo">☕ Somewhere</div>
-    <div class="loading-subtitle">따뜻한 공간을 준비하고 있어요</div>
-    <div class="loading-paws">
-      <div class="loading-paw"></div>
-      <div class="loading-paw"></div>
-      <div class="loading-paw"></div>
-    </div>
+  <div id="loading">
+    <div class="ld-logo">☕ Somewhere</div>
+    <div class="ld-sub">따뜻한 공간을 준비하고 있어요</div>
+    <div class="ld-dots"><i></i><i></i><i></i></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
