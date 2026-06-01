@@ -350,7 +350,7 @@ export class HUD {
   <!-- 접속자 -->
   <div class="hud-online">
     <div class="hud-online-dot"></div>
-    <span id="hud-online-count">${onlineCount}</span>명 접속중
+    <span id="hud-online-room"></span><span id="hud-online-count">${onlineCount}</span>명 접속중
   </div>
 
   <div style="flex:1"></div>
@@ -524,9 +524,14 @@ export class HUD {
     const coinEl = this._el.querySelector('#hud-coin-value');
     if (coinEl) coinEl.textContent = auth.user?.coin || 0;
 
-    // 접속자 수
+    // 접속자 수 + 룸 라벨
     const countEl = this._el.querySelector('#hud-online-count');
     if (countEl) countEl.textContent = onlineUsers.length;
+    const roomEl = this._el.querySelector('#hud-online-room');
+    if (roomEl) {
+      const room = store.getState().room;
+      roomEl.textContent = room?.label ? `${room.label} · ` : '';
+    }
 
     // 채팅 버튼 활성화
     const chatBtn = this._el.querySelector('#hud-chat-btn');

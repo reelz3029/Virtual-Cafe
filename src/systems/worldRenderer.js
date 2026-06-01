@@ -640,10 +640,15 @@ export class WorldRenderer {
 
     const span = this._activeScene?.gridSpan;
     if (span) {
+      // (구) 무한 타일 월드: 토로이달 랩핑
       const half = span / 2;
-      // ((v + half) % span + span) % span - half → [-half, +half) 범위로 랩
       target.x = ((target.x + half) % span + span) % span - half;
       target.z = ((target.z + half) % span + span) % span - half;
+    } else {
+      // 닫힌 룸: 룸 밖으로 못 나가게 팬 범위 클램프
+      const lim = this._activeScene?.panLimit ?? 4.5;
+      target.x = THREE.MathUtils.clamp(target.x, -lim, lim);
+      target.z = THREE.MathUtils.clamp(target.z, -lim, lim);
     }
 
     this.camera.position.set(target.x + 9, 9, target.z + 9);

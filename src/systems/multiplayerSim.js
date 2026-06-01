@@ -18,10 +18,12 @@ import {
   setChatMessages,
   setTableChatMessages,
   setSeat,
+  setRoom,
   resolveJoinRequest,
   showNotification,
 } from '../store/gameStore.js';
 import { presenceManager }                from './presenceManager.js';
+import { roomAllocator }                  from './roomAllocator.js';
 import { isFirebaseConfigured, FIREBASE_CONFIG } from './firebaseConfig.js';
 import { getApp, getApps, initializeApp }  from 'firebase/app';
 import {
@@ -58,17 +60,23 @@ class MultiplayerSim {
    * @param {number} tableCount  - 테이블 수 (씬 구성용)
    * @param {string} scene       - 씬 이름 ('cafe' | 'airport' | 'park')
    */
-  start(tableCount = 8, scene = 'cafe') {
+  async start(tableCount = 8, scene = 'cafe') {
     if (this._running) this.stop();
     this._running    = true;
-    this._scene      = scene;
     this._tableCount = tableCount;
 
     const { auth } = store.getState();
-    if (!auth.user) return;
+    if (!auth.user) { this._running = false; return; }
+
+    // 0. 룸 샤딩 — 정원(테이블×좌석) 기준으로 입장할 룸 인스턴스 배정
+    const capacity = tableCount * SEATS_PER_TABLE;
+    const room = await roomAllocator.allocateRoom(scene, capacity);
+    if (!this._running) return;   // await 중 stop() 호출됐으면 중단
+    this._scene = room;
+    setRoom(room, roomAllocator.labelFor(room));
 
     // 1. Presence 등록 (다른 유저 변화 시 _syncUsers 재호출)
-    presenceManager.join(auth.user, scene, () => this._syncUsers());
+    presenceManager.join(auth.user, room, () => this._syncUsers());
 
     // Firebase 초기 데이터 도착 후 자동 착석 (1.5초 대기)
     this._autoSitTimer = setTimeout(() => this._autoSit(), 1500);
@@ -84,8 +92,8 @@ class MultiplayerSim {
 
     const db = getDB();
 
-    // 2. 채팅 구독 — 씬별 최근 50개 메시지 실시간 동기화
-    const chatRef = query(ref(db, `chat/${scene}`), limitToLast(50));
+    // 2. 채팅 구독 — 룸별 최근 50개 메시지 실시간 동기화
+    const chatRef = query(ref(db, `chat/${this._scene}`), limitToLast(50));
     this._chatUnsub = onValue(chatRef, snap => {
       const msgs = [];
       snap.forEach(child => {
@@ -149,6 +157,7 @@ class MultiplayerSim {
     setOnlineUsers([]);
     setChatMessages([]);
     setTableChatMessages([]);
+    setRoom(null, null);
     store.setState({ myTableId: null, mySeatIndex: null });
   }
 

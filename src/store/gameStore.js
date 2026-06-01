@@ -91,6 +91,9 @@ const INITIAL_STATE = {
   // ── 뷰 모드: 'iso'(로비 탑다운) | 'fp'(착석 1인칭) ──
   viewMode: 'iso',
 
+  // ── 룸 샤딩: 현재 배정된 룸 인스턴스 ──
+  room: { id: null, label: null },
+
   // ── 시스템 ──
   sessionStart: null,
   coinAccumulator: 0,
@@ -187,6 +190,11 @@ export function setSeat(tableId, seatIndex) {
 /** 뷰 모드 설정 ('iso' | 'fp') */
 export function setViewMode(mode) {
   store.setState({ viewMode: mode });
+}
+
+/** 배정된 룸 인스턴스 설정 */
+export function setRoom(id, label) {
+  store.setState({ room: { id, label } });
 }
 
 /** 채팅 메시지 추가 (단일) */
