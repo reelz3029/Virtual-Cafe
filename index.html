@@ -9,9 +9,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
   <script src="https://accounts.google.com/gsi/client" async></script>
   <link rel="stylesheet" href="/src/styles/loading.css" />
+  <style>
+    /* "움직이는 일러스트" 질감 — 3D 캔버스 위, UI(z>=10) 아래 */
+    #grain, #vignette { position: fixed; inset: 0; pointer-events: none; }
+    /* 따뜻한 비네트 — 가장자리 자연스러운 어두움 */
+    #vignette {
+      z-index: 3;
+      background: radial-gradient(ellipse at 50% 42%,
+        transparent 50%, rgba(60,28,10,0.28) 100%);
+    }
+    /* 종이 grain — fractalNoise, multiply 블렌드 */
+    #grain {
+      z-index: 4; opacity: 0.38; mix-blend-mode: multiply;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+    }
+  </style>
 </head>
 <body>
   <canvas id="world-canvas"></canvas>
+  <div id="vignette"></div>
+  <div id="grain"></div>
   <div id="overlay"></div>
   <div id="ui-root"></div>
 

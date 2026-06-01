@@ -225,11 +225,11 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0x3A2418, 1);   // 황혼 배경
+    this.renderer.setClearColor(0x5A4330, 1);   // 따뜻한 중간톤 황혼 배경
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.15;
   }
 
   _initCamera() {

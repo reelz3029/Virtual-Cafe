@@ -119,12 +119,12 @@ export class CafeScene {
       .filter(o => o.isLight)
       .forEach(l => this.scene.remove(l));
 
-    // 황혼 배경 + 따뜻한 안개
-    this.scene.background = new THREE.Color(0x3A2418);
-    this.scene.fog = new THREE.Fog(0x3A2418, 24, 56);
+    // 황혼 배경 + 따뜻한 안개 (중간톤으로 살짝 밝게 — 칙칙함 방지)
+    this.scene.background = new THREE.Color(0x5A4330);
+    this.scene.fog = new THREE.Fog(0x5A4330, 28, 60);
 
-    // 앰비언트 (황혼) — 사양서값
-    this.scene.add(new THREE.AmbientLight(0xFFE0B0, 0.55));
+    // 앰비언트 (황혼) — 살짝 상향
+    this.scene.add(new THREE.AmbientLight(0xFFE6BC, 0.7));
 
     // 메인: 창으로 낮게 드는 황혼빛 — 그림자 ON
     const sun = new THREE.DirectionalLight(0xFF9D4D, 2.4);
