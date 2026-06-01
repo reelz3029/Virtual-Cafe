@@ -70,7 +70,7 @@ export class WorldRenderer {
     // 전환용 퍼스펙티브 카메라 (iso↔fp 보간 중 렌더)
     this._transitionCam = new THREE.PerspectiveCamera(
       50, window.innerWidth / window.innerHeight, 0.1, 200);
-    this.viewMode  = 'iso';         // 'iso' | 'fp' | 'transition'
+    this.viewMode  = 'iso';         // 'iso' | 'desk' | 'transition'
     this._camTween = null;          // 진행 중 전환 상태
     // 1인칭 둘러보기(look-around) 상태
     this._fp = { eye: new THREE.Vector3(), baseYaw: 0, basePitch: 0, yaw: 0, pitch: 0 };
@@ -80,20 +80,18 @@ export class WorldRenderer {
     this._bindEvents();
     _instance = this;
 
-    // 로그인 상태에 따라 시점 버튼 표시/숨김 (로그인 화면에선 숨김)
-    this._syncToggleVisibility(store.getState());
-    this._unsubAuth = store.subscribe(s => this._syncToggleVisibility(s));
+    // 로그아웃 시 일어서기 버튼 강제 숨김 (표시는 desk 진입이 제어)
+    this._unsubAuth = store.subscribe(s => {
+      if (!s.auth?.isLoggedIn) this._setStandBtn(false);
+    });
   }
 
-  _syncToggleVisibility(state) {
-    if (!this._viewToggleEl) return;
-    this._viewToggleEl.style.display = state.auth?.isLoggedIn ? 'block' : 'none';
-  }
-
-  // ── 시점 전환 버튼 (항상 표시, iso↔fp 토글) ────────────────
+  // ── "일어서기" 버튼 (desk 모드 전용) ───────────────────────
+  // 진입은 테이블 클릭(착석)으로, 복귀는 이 버튼으로.
   _createViewToggleButton() {
     const el = document.createElement('button');
-    el.id = 'btn-view-toggle';
+    el.id = 'btn-stand-up';
+    el.textContent = '🚶 일어서기';
     el.style.cssText = `
       position: fixed; left: 24px; bottom: 24px; z-index: 60; display: none;
       padding: 11px 18px; border: none; border-radius: 999px;
@@ -105,50 +103,14 @@ export class WorldRenderer {
     `;
     el.addEventListener('mouseenter', () => { el.style.background = 'rgba(70,48,30,0.96)'; });
     el.addEventListener('mouseleave', () => { el.style.background = 'rgba(90,62,40,0.92)'; });
-    el.addEventListener('click', () => this.toggleView());
+    el.addEventListener('click', () => this.exitToIso());
     document.body.appendChild(el);
     this._viewToggleEl = el;
-    this._updateViewToggleLabel();
     return el;
   }
 
-  _updateViewToggleLabel() {
-    if (!this._viewToggleEl) return;
-    const mode = store.getState().viewMode;
-    this._viewToggleEl.textContent =
-      mode === 'fp' ? '🗺️ 로비로 나가기' : '🪑 1인칭으로 앉기';
-  }
-
-  // ── 시점 토글 (버튼 클릭) ──────────────────────────────────
-  toggleView() {
-    if (this.viewMode === 'transition') return;  // 전환 중 무시
-    if (this.viewMode === 'fp') { this.exitToIso(); return; }
-
-    // iso → fp: 내 캐릭터가 앉은 좌석으로 진입
-    const { myTableId, mySeatIndex } = store.getState();
-    if (myTableId && this._activeScene?.tables?.has(myTableId)) {
-      this.enterFirstPerson(myTableId, mySeatIndex ?? 0);
-      return;
-    }
-    // 아직 안 앉았으면 가장 가까운 테이블에 앉힌 뒤 그 좌석 1인칭
-    const tableId = this._nearestTableId();
-    if (!tableId) { showNotification('주변에 테이블이 없어요 😅', 'info'); return; }
-    setSeat(tableId, 0);
-    multiplayerSim.refreshMyPosition();
-    this.enterFirstPerson(tableId, 0);
-  }
-
-  // 카메라 타겟에 가장 가까운 테이블 id
-  _nearestTableId() {
-    if (!this._activeScene) return null;
-    const t = this._cam.target;
-    let best = null, bestD = Infinity;
-    this._activeScene.tables.forEach((data, id) => {
-      const dx = data.position.x - t.x, dz = data.position.z - t.z;
-      const d = dx * dx + dz * dz;
-      if (d < bestD) { bestD = d; best = id; }
-    });
-    return best;
+  _setStandBtn(show) {
+    if (this._viewToggleEl) this._viewToggleEl.style.display = show ? 'block' : 'none';
   }
 
   // ── 테이블 hover 툴팁 생성 ──────────────────────────────
@@ -332,8 +294,8 @@ export class WorldRenderer {
     const dx = e.clientX - this._cam.lastMouse.x;
     const dy = e.clientY - this._cam.lastMouse.y;
 
-    // fp 모드: 좌클릭 드래그로 둘러보기 (yaw/pitch)
-    if (this.viewMode === 'fp') {
+    // desk 모드: 좌클릭 드래그로 테이블 주변 살짝 둘러보기 (orbit)
+    if (this.viewMode === 'desk') {
       this._fp.yaw   = THREE.MathUtils.clamp(this._fp.yaw   - dx * 0.004, -FP_YAW_LIMIT, FP_YAW_LIMIT);
       this._fp.pitch = THREE.MathUtils.clamp(this._fp.pitch - dy * 0.003, -FP_PITCH_LIMIT, FP_PITCH_LIMIT);
       this._cam.lastMouse = { x: e.clientX, y: e.clientY };
@@ -382,10 +344,10 @@ export class WorldRenderer {
   }
 
   _onWheel(e) {
-    if (this.viewMode === 'fp') {
-      // 살짝의 FOV 조정만 (줌 인/아웃 없음)
+    if (this.viewMode === 'desk') {
+      // 데스크 클로즈업 FOV 미세 조정 (줌 인/아웃 없음)
       this.fpCamera.fov = THREE.MathUtils.clamp(
-        this.fpCamera.fov + (e.deltaY > 0 ? 1.5 : -1.5), 45, 65);
+        this.fpCamera.fov + (e.deltaY > 0 ? 1.5 : -1.5), 36, 52);
       this.fpCamera.updateProjectionMatrix();
       return;
     }
@@ -505,49 +467,52 @@ export class WorldRenderer {
       return;
     }
     if (myTableId === tableId) {
-      showNotification('이미 앉아있는 자리예요 😊', 'info');
+      // 이미 내 자리 — 데스크 클로즈업으로 다시 들어가기
+      this.enterDesk(tableId, store.getState().mySeatIndex ?? 0);
       return;
     }
     setSeat(tableId, 0);
     multiplayerSim.refreshMyPosition();
-    showNotification('자리에 앉았어요! ☕ (좌하단 버튼으로 1인칭 전환)', 'success');
+    showNotification('자리에 앉았어요! ☕', 'success');
+    this.enterDesk(tableId, 0);   // 착석 → 데스크 시점으로 내려감
   }
 
-  // ── 듀얼 카메라: 1인칭 착석 뷰로 다이브 ────────────────────
-  enterFirstPerson(tableId, seatIndex = 0) {
+  // ── 듀얼 카메라: "내 자리" 탑다운 클로즈업으로 내려감 ───────
+  // 1인칭이 아니라, 내 테이블 위로 비스듬히 내려오는 따뜻한 근접뷰.
+  enterDesk(tableId, seatIndex = 0) {
     const tableData = this._activeScene?.tables?.get(tableId);
     if (!tableData) return;
     const seat = tableData.seats[seatIndex] ?? tableData.seats[0];
     if (!seat) return;
 
-    // 착석 눈높이 — 테이블 건너편을 거의 수평으로 바라봄
     const center = tableData.position;
-    const eye    = new THREE.Vector3(seat.worldX, 1.25, seat.worldZ);
-    // 시선 타겟: 테이블 중심 너머(건너편 좌석 방향)로 연장 → 맞은편 동석자/배경이 보임
-    const lookAt = new THREE.Vector3(
-      center.x + (center.x - seat.worldX) * 0.6,
-      1.12,   // 눈높이보다 살짝만 낮음 → 완만한 시선 (이전 0.85는 너무 아래)
-      center.z + (center.z - seat.worldZ) * 0.6,
+    // 테이블 중심 → 내 좌석 방향(수평)으로 약간 물러나며 높이 위에서 내려다봄
+    const dx = seat.worldX - center.x, dz = seat.worldZ - center.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = dx / len, nz = dz / len;
+    const eye = new THREE.Vector3(
+      center.x + nx * 1.9, 2.7, center.z + nz * 1.9,   // 좌석 쪽 위 공중
     );
+    const lookAt = new THREE.Vector3(center.x, 0.78, center.z);  // 테이블 상판
 
-    // look-around 기준 yaw/pitch 저장 (테이블 정면)
+    // 약간의 둘러보기(orbit) 기준 저장
     const L = lookAt.clone().sub(eye);
     this._fp.eye.copy(eye);
     this._fp.baseYaw   = Math.atan2(L.x, L.z);
     this._fp.basePitch = Math.atan2(L.y, Math.hypot(L.x, L.z));
     this._fp.yaw = 0; this._fp.pitch = 0;
 
-    // 현재 iso 카메라 포즈에서 출발 → 착석 포즈로 보간
+    this.fpCamera.fov = 42;          // 살짝 좁혀 클로즈업 느낌
+    this.fpCamera.updateProjectionMatrix();
+
     const fromPos    = this.isoCamera.position.clone();
-    const fromTarget = this._cam.target.clone();   // iso는 지면(target)을 바라봄
+    const fromTarget = this._cam.target.clone();
     this._hideTableTooltip();
     this.viewMode = 'transition';
-    setViewMode('fp');   // HUD가 즉시 fp로 반응 (힌트/툴팁 숨김)
-    this._updateViewToggleLabel();
+    setViewMode('desk');
     this._camTween = {
-      t: 0, dur: 0.9, mode: 'enter',
+      t: 0, dur: 0.85, mode: 'enter',
       fromPos, fromTarget, toPos: eye.clone(), toTarget: lookAt.clone(),
-      // 시작 FOV를 iso 직교 화각과 일치시켜 t=0 팝(pop) 제거
       fovFrom: this._isoMatchFov(fromPos, fromTarget),
       fovTo:   this.fpCamera.fov,
     };
@@ -565,7 +530,7 @@ export class WorldRenderer {
     const isoPose = this._isoPoseFor(this._cam.target);
     this.viewMode = 'transition';
     setViewMode('iso');
-    this._updateViewToggleLabel();
+    this._setStandBtn(false);
     this._camTween = {
       t: 0, dur: 0.9, mode: 'exit',
       fromPos, fromTarget, toPos: isoPose.pos, toTarget: isoPose.target,
@@ -602,7 +567,7 @@ export class WorldRenderer {
 
   // fp 모드: 방향키/WASD로 시선 회전 (이동 없음 — 착석 상태)
   _applyFpLook(delta) {
-    if (this.viewMode !== 'fp') return;
+    if (this.viewMode !== 'desk') return;
     const tag = document.activeElement?.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea') return;
 
@@ -688,12 +653,14 @@ export class WorldRenderer {
     if (tw.t >= 1) {
       this._camTween = null;
       if (tw.mode === 'enter') {
-        this.viewMode = 'fp';
+        this.viewMode = 'desk';
         this._applyFpCamera();
         this.camera = this.fpCamera;
+        this._setStandBtn(true);
       } else {
         this.viewMode = 'iso';
         this.camera = this.isoCamera;
+        this._setStandBtn(false);
         this._updateCameraFrustum();
         this._updateCameraPosition();
       }

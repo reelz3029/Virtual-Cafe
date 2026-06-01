@@ -88,7 +88,7 @@ const INITIAL_STATE = {
     zoom: 1.0,
   },
 
-  // ── 뷰 모드: 'iso'(로비 탑다운) | 'fp'(착석 1인칭) ──
+  // ── 뷰 모드: 'iso'(로비 탑다운) | 'desk'(내 자리 클로즈업) | 'transition' ──
   viewMode: 'iso',
 
   // ── 룸 샤딩: 현재 방의 무드 메타 (roomAllocator) ──
@@ -187,7 +187,7 @@ export function setSeat(tableId, seatIndex) {
   store.setState({ myTableId: tableId, mySeatIndex: seatIndex });
 }
 
-/** 뷰 모드 설정 ('iso' | 'fp') */
+/** 뷰 모드 설정 ('iso' | 'desk' | 'transition') */
 export function setViewMode(mode) {
   store.setState({ viewMode: mode });
 }
