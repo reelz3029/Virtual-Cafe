@@ -529,8 +529,8 @@ export class HUD {
     if (countEl) countEl.textContent = onlineUsers.length;
     const roomEl = this._el.querySelector('#hud-online-room');
     if (roomEl) {
-      const room = store.getState().room;
-      roomEl.textContent = room?.label ? `${room.label} · ` : '';
+      const rm = store.getState().roomMood;
+      roomEl.textContent = rm?.name ? `${rm.emoji ?? ''} ${rm.name} · ` : '';
     }
 
     // 채팅 버튼 활성화

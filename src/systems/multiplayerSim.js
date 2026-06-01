@@ -18,7 +18,7 @@ import {
   setChatMessages,
   setTableChatMessages,
   setSeat,
-  setRoom,
+  setRoomMood,
   resolveJoinRequest,
   showNotification,
 } from '../store/gameStore.js';
@@ -68,15 +68,14 @@ class MultiplayerSim {
     const { auth } = store.getState();
     if (!auth.user) { this._running = false; return; }
 
-    // 0. 룸 샤딩 — 정원(테이블×좌석) 기준으로 입장할 룸 인스턴스 배정
-    const capacity = tableCount * SEATS_PER_TABLE;
-    const room = await roomAllocator.allocateRoom(scene, capacity);
+    // 0. 룸 샤딩 — 채우기 우선으로 입장할 방 배정 (roomCounts 카운터 +1)
+    const { scene: roomScene, mood } = await roomAllocator.allocate(scene);
     if (!this._running) return;   // await 중 stop() 호출됐으면 중단
-    this._scene = room;
-    setRoom(room, roomAllocator.labelFor(room));
+    this._scene = roomScene;
+    setRoomMood(mood);
 
     // 1. Presence 등록 (다른 유저 변화 시 _syncUsers 재호출)
-    presenceManager.join(auth.user, room, () => this._syncUsers());
+    presenceManager.join(auth.user, roomScene, () => this._syncUsers());
 
     // Firebase 초기 데이터 도착 후 자동 착석 (1.5초 대기)
     this._autoSitTimer = setTimeout(() => this._autoSit(), 1500);
@@ -154,10 +153,11 @@ class MultiplayerSim {
     this._tableChatUnsub  = null;
     this._subscribedTblId = null;
     presenceManager.leave();
+    roomAllocator.leave();          // roomCounts 카운터 -1
     setOnlineUsers([]);
     setChatMessages([]);
     setTableChatMessages([]);
-    setRoom(null, null);
+    setRoomMood(null);
     store.setState({ myTableId: null, mySeatIndex: null });
   }
 
@@ -456,6 +456,9 @@ class MultiplayerSim {
     }
 
     setOnlineUsers(all);
+
+    // 룸 카운터 셀프 힐링 — 실제 presence 인원으로 드리프트 보정
+    roomAllocator.reconcile(presenceManager.getTotalCount());
   }
 }
 

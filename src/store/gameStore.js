@@ -91,8 +91,8 @@ const INITIAL_STATE = {
   // ── 뷰 모드: 'iso'(로비 탑다운) | 'fp'(착석 1인칭) ──
   viewMode: 'iso',
 
-  // ── 룸 샤딩: 현재 배정된 룸 인스턴스 ──
-  room: { id: null, label: null },
+  // ── 룸 샤딩: 현재 방의 무드 메타 (roomAllocator) ──
+  roomMood: null,   // { id, name, mood, emoji } | null
 
   // ── 시스템 ──
   sessionStart: null,
@@ -192,9 +192,9 @@ export function setViewMode(mode) {
   store.setState({ viewMode: mode });
 }
 
-/** 배정된 룸 인스턴스 설정 */
-export function setRoom(id, label) {
-  store.setState({ room: { id, label } });
+/** 배정된 룸 무드 설정 (roomAllocator.allocate 결과) */
+export function setRoomMood(mood) {
+  store.setState({ roomMood: mood });
 }
 
 /** 채팅 메시지 추가 (단일) */

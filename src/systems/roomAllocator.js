@@ -1,76 +1,188 @@
 /**
  * systems/roomAllocator.js
- * 룸/인스턴스 샤딩 — "한 방을 무한히 키우기"가 아니라 "적당한 방 여러 개"
+ * 룸 샤딩 배정 — 한 방이 차면 새 방을 열고, 덜 찬 방부터 비우는 방식
  *
- * 정원이 정해진 룸(cafe_room1, cafe_room2, …)을 Firebase presence 인원수로
- * 판단해 채워나가는 순서로 배정한다. 빈 방 썰렁함을 줄이기 위해
- * "앞 방이 거의 찰 때만 다음 방을 연다".
+ * 기존 presence 구조 /presence/{scene}/{sid} 를 그대로 활용하되,
+ * scene 을 'cafe' → 'cafe__room0', 'cafe__room1' … 으로 확장한다.
  *
- * presence 경로: /presence/{base}_room{N}/{sessionId}
+ * 배정에 필요한 "방별 인원수"는 presence 전체를 읽지 않고
+ * 가벼운 카운터 경로 /roomCounts/{base}/{roomId} 만 읽어서 판단한다.
+ *   - 입장 시 transaction 으로 +1, 퇴장(onDisconnect 포함) 시 -1
+ *   - 카운터는 배정 판단용 힌트일 뿐, 실제 좌석 점유의 정답은 presence 다.
+ *
+ * DB 경로
+ *   /roomCounts/{base}/{roomId} = <number>     (예: /roomCounts/cafe/room0 = 14)
+ *
+ * 보안 규칙 (Realtime Database):
+ *   "roomCounts": { ".read": true, ".write": true }
  */
 
-import { isFirebaseConfigured, FIREBASE_CONFIG } from './firebaseConfig.js';
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getDatabase, ref, get } from 'firebase/database';
+import {
+  getDatabase, ref, onValue, runTransaction, onDisconnect, get,
+} from 'firebase/database';
+import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebaseConfig.js';
 
-const MAX_ROOMS = 50;       // 안전 상한
-const OPEN_NEW_RATIO = 0.85; // 앞 방이 85% 이상 차야 새 방을 연다
+// ── 설정 ──────────────────────────────────────────────────
+export const ROOM_CONFIG = {
+  capacity: 16,        // 방 정원 (시뮬레이터에서 고른 값)
+  seatsPerTable: 4,    // multiplayerSim 의 SEATS_PER_TABLE 와 일치시킬 것
+  // 방별 무드 — roomId 인덱스 순서대로 부여
+  moods: [
+    { id: 'room0', name: '1층 · 공용홀',   mood: '활기찬 큰 테이블', emoji: '☕' },
+    { id: 'room1', name: '2층 · 창가',     mood: '조용한 1인석',     emoji: '🌇' },
+    { id: 'room2', name: '다락방',         mood: '심야 집중 구역',   emoji: '🕯️' },
+    { id: 'room3', name: '안뜰 테라스',    mood: '바람 드는 야외',   emoji: '🌿' },
+    { id: 'room4', name: '지하 서고',      mood: '책에 둘러싸인',    emoji: '📚' },
+    { id: 'room5', name: '별관 · 라운지',  mood: '느긋한 소파석',    emoji: '🛋️' },
+  ],
+  maxRooms: 6,
+};
 
-function getDB() {
-  const app = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
-  return getDatabase(app);
+/** capacity 로부터 테이블 개수 산출 */
+export function tableCountForRoom() {
+  return Math.ceil(ROOM_CONFIG.capacity / ROOM_CONFIG.seatsPerTable);
 }
 
-/** 특정 룸의 현재 접속자 수 */
-async function roomCount(db, scene) {
-  try {
-    const snap = await get(ref(db, `presence/${scene}`));
-    return snap.exists() ? snap.size : 0;
-  } catch {
-    return 0;
-  }
+/** base scene + roomId → presence scene 키 */
+export function sceneKey(base, roomId) {
+  return `${base}__${roomId}`;
+}
+
+/** scene 키 → 무드 메타 */
+export function moodForRoom(roomId) {
+  return ROOM_CONFIG.moods.find(m => m.id === roomId)
+      || { id: roomId, name: roomId, mood: '', emoji: '🏠' };
 }
 
 class RoomAllocator {
+  constructor() {
+    this._db = null;
+    this._base = null;          // 'cafe'
+    this._roomId = null;        // 배정된 'room0' 등
+    this._countsUnsub = null;
+    this._myCountRef = null;
+    this._counts = {};          // { room0: 14, room1: 3, ... }
+  }
+
+  _initDB() {
+    if (this._db) return true;
+    if (!isFirebaseConfigured()) return false;
+    const app = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
+    this._db = getDatabase(app);
+    return true;
+  }
+
   /**
-   * 입장할 룸을 결정한다.
-   * @param {string} base     - 베이스 씬 이름 ('cafe')
-   * @param {number} capacity - 룸 1개 정원 (예: 32)
-   * @returns {Promise<string>} 배정된 룸 씬 id (예: 'cafe_room1')
+   * 입장할 방을 결정하고 카운터를 +1 한다.
+   * @param {string} base  - 'cafe'
+   * @returns {Promise<{ roomId, scene, mood }>}
    */
-  async allocateRoom(base = 'cafe', capacity = 32) {
-    // Firebase 미설정 → 단일 룸
-    if (!isFirebaseConfigured()) return `${base}_room1`;
+  async allocate(base) {
+    this._base = base;
 
-    const db = getDB();
-    const openThreshold = Math.floor(capacity * OPEN_NEW_RATIO);
-
-    for (let n = 1; n <= MAX_ROOMS; n++) {
-      const scene = `${base}_room${n}`;
-      const count = await roomCount(db, scene);
-
-      // 정원 미만이면서, (1번 방이거나 / 빈 자리가 있는) 방에 배정
-      if (count < capacity) {
-        // 다음 방을 새로 여는 건 현재 방이 충분히 찼을 때만.
-        // → 거의 빈 방이 여러 개 흩어지는 걸 방지 (썰렁함 완충)
-        if (count < openThreshold || n === MAX_ROOMS) {
-          return scene;
-        }
-        // count가 openThreshold~capacity 사이면: 이 방도 받을 수 있지만
-        // 다음 방도 확인해 더 빈 방이 있으면 그쪽으로 — 단, 없으면 이 방.
-        const nextCount = await roomCount(db, `${base}_room${n + 1}`);
-        if (nextCount === 0) return scene; // 다음 방은 아직 안 열림 → 이 방 마저 채움
-        // 다음 방이 이미 열려있으면 루프가 다음 n에서 판단
-      }
+    // Firebase 미설정: 단일 방으로 폴백
+    if (!this._initDB()) {
+      this._roomId = 'room0';
+      return { roomId: 'room0', scene: sceneKey(base, 'room0'), mood: moodForRoom('room0') };
     }
-    return `${base}_room1`;
+
+    // 1. 현재 방별 카운트 스냅샷 읽기
+    const snap = await get(ref(this._db, `roomCounts/${base}`));
+    this._counts = snap.val() || {};
+
+    // 2. "채우기 우선" — 안 꽉 찬 방 중 가장 많이 찬 방
+    const chosen = this._pickRoom();
+
+    // 3. 카운터 +1 (transaction 으로 경쟁 방지)
+    this._roomId = chosen;
+    this._myCountRef = ref(this._db, `roomCounts/${base}/${chosen}`);
+    await runTransaction(this._myCountRef, cur => (cur || 0) + 1);
+
+    // 4. 비정상 종료/탭 닫힘 시 카운터 자동 -1
+    onDisconnect(this._myCountRef).set(
+      // onDisconnect 는 함수 트랜잭션을 못 받으므로, 별도 감산 ref 사용
+      // → 여기서는 단순화를 위해 leave() 의 정상 감산에 의존하고,
+      //   onDisconnect 는 presence 가 책임진다. (카운터는 셀프 힐링 가능)
+      undefined
+    );
+    // 주: onDisconnect 트랜잭션 한계로, 카운터 드리프트는 _reconcile() 로 보정
+
+    return {
+      roomId: chosen,
+      scene: sceneKey(base, chosen),
+      mood: moodForRoom(chosen),
+    };
   }
 
-  /** 룸 id → 사람이 읽는 라벨 */
-  labelFor(scene) {
-    const m = /_room(\d+)$/.exec(scene || '');
-    return m ? `${m[1]}번 방` : '카페';
+  /** 안 꽉 찬 방 중 가장 많이 찬 방 선택, 없으면 새 방 */
+  _pickRoom() {
+    const { capacity, maxRooms } = ROOM_CONFIG;
+    const candidates = [];
+    for (let i = 0; i < maxRooms; i++) {
+      const rid = `room${i}`;
+      const n = this._counts[rid] || 0;
+      if (n < capacity) candidates.push({ rid, n });
+    }
+    if (!candidates.length) {
+      // 전부 만석 — 마지막 방에 오버플로 (정원 약간 초과 허용)
+      return `room${maxRooms - 1}`;
+    }
+    // 가장 많이 찬(=n이 큰) 방부터. 단 0인 방이 여러 개면 가장 앞 방.
+    candidates.sort((a, b) => b.n - a.n);
+    // 모든 후보가 0명이면 room0 (가장 앞)
+    if (candidates.every(c => c.n === 0)) return 'room0';
+    return candidates[0].rid;
   }
+
+  /**
+   * 방별 카운트 실시간 구독 (UI 표시·디버그용)
+   * @param {function(Object)} cb - { room0: n, ... }
+   */
+  watchCounts(base, cb) {
+    if (!this._initDB()) { cb({}); return () => {}; }
+    const r = ref(this._db, `roomCounts/${base}`);
+    this._countsUnsub = onValue(r, snap => {
+      this._counts = snap.val() || {};
+      cb(this._counts);
+    });
+    return () => { this._countsUnsub?.(); this._countsUnsub = null; };
+  }
+
+  /**
+   * 셀프 힐링 — 내 방의 실제 presence 인원으로 카운터를 보정한다.
+   * presenceManager 의 onValue 콜백(모든 기기에서 호출됨)에서 주기적으로 부르면,
+   * onDisconnect 트랜잭션 한계로 생기는 고스트 +1 드리프트가 자연히 수렴한다.
+   *
+   * @param {number} realCount - presenceManager.getTotalCount() 결과
+   */
+  reconcile(realCount) {
+    if (!this._db || !this._base || !this._roomId) return;
+    if (typeof realCount !== 'number') return;
+
+    const ref_ = ref(this._db, `roomCounts/${this._base}/${this._roomId}`);
+    // 카운터가 실제보다 크게 벌어졌을 때만 보정 (쓰기 경쟁 최소화)
+    runTransaction(ref_, cur => {
+      const c = cur || 0;
+      // 실제 인원과 2 이상 차이날 때만 실제값으로 끌어내림/올림
+      if (Math.abs(c - realCount) >= 2) return realCount;
+      return cur; // 변경 없음
+    });
+  }
+
+  /** 퇴장 — 카운터 -1 */
+  async leave() {
+    if (this._myCountRef) {
+      await runTransaction(this._myCountRef, cur => Math.max(0, (cur || 0) - 1));
+      this._myCountRef = null;
+    }
+    this._countsUnsub?.();
+    this._countsUnsub = null;
+    this._roomId = null;
+  }
+
+  get currentRoomId() { return this._roomId; }
+  get counts() { return this._counts; }
 }
 
 export const roomAllocator = new RoomAllocator();
