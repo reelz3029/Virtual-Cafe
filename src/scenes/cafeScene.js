@@ -539,9 +539,15 @@ export class CafeScene {
     const pos      = this._resolvePosition(tableId, seatIndex, id);
     const existing = this.characterSprites.get(id);
 
+    // 유저 상태 → 표정/사물 자동 전환
+    //  · 커피 들고 있으면 sip, 앉아있으면 study(노트북/책), 그 외 normal
+    const opts = this._spriteOptsFor(userInfo);
+    const stateKey = `${opts.expression}|${opts.item}|${opts.dir}`;
+
     if (existing) {
       const p = existing.group.position;
-      const avatarKey = avatar ? `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}` : '';
+      const avatarKey = avatar
+        ? `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}_${stateKey}` : '';
       if (
         Math.abs(p.x - pos.x) < 0.001 &&
         Math.abs(p.z - pos.z) < 0.001 &&
@@ -553,7 +559,7 @@ export class CafeScene {
     if (!avatar) return;
 
     const group  = new THREE.Group();
-    const sprite = createCharacterSprite(avatar, username);
+    const sprite = createCharacterSprite(avatar, username, opts);
     sprite.position.y = 0.45;
     group.add(sprite);
 
@@ -583,8 +589,24 @@ export class CafeScene {
     group.userData.userId = id;
     this.scene.add(group);
 
-    const avatarKey = `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}`;
+    const avatarKey = `${avatar.bodyColor}_${(avatar.accessories || []).sort().join(',')}_${stateKey}`;
     this.characterSprites.set(id, { group, sprite, nameTag, avatarKey });
+  }
+
+  // 유저 상태 → { expression, item, dir }
+  _spriteOptsFor({ tableId, seatIndex, heldCoffee, id = '' }) {
+    let expression = 'normal', item = 'none';
+    if (heldCoffee) {
+      expression = 'sip';
+    } else if (tableId) {
+      expression = 'study';
+      // 좌석/유저 해시로 공부 사물 다양화
+      const h = (id.charCodeAt(0) || 0) + (seatIndex ?? 0);
+      item = ['laptop', 'book', 'sketch'][h % 3];
+    }
+    // 안쪽(테이블 중심)을 보는 좌석은 뒤돌아 앉은 모습 — seatIndex 0/2 를 back 처리
+    const dir = (tableId && (seatIndex === 0 || seatIndex === 2)) ? 'back' : 'front';
+    return { expression, item, dir };
   }
 
   removeCharacter(userId) {
