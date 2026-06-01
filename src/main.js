@@ -81,13 +81,14 @@ document.querySelectorAll('.vbtn[data-view]').forEach(b => {
     world.setView(v);
 
     const cap = document.getElementById('caption');
-    if (v === 'iso') {
-      cap.querySelector('.title').textContent = '해질녘 책방 카페';
-      cap.querySelector('.desc').textContent  = '각자의 사물에 몰입한 고양이들 · 단면 인형의집 구조 · 종이질감 오버레이';
-    } else {
-      cap.querySelector('.title').textContent = '내 자리 — 창가 햇살';
-      cap.querySelector('.desc').textContent  = '자리에 앉으면 카메라가 내 책상으로 · 창밖으로 흐릿한 다른 손님들';
-    }
+    const caps = {
+      iso:  ['해질녘 책방 카페', '각자의 사물에 몰입한 고양이들 · 단면 인형의집 구조 · 종이질감 오버레이'],
+      desk: ['내 자리 — 창가 햇살', '카메라가 내 책상으로 내려옵니다 · 창밖으로 흐릿한 다른 손님들'],
+      fp:   ['1인칭 — 내 시선', '드래그 또는 방향키로 좌우·위아래를 둘러보세요'],
+    };
+    const [title, desc] = caps[v] || caps.iso;
+    cap.querySelector('.title').textContent = title;
+    cap.querySelector('.desc').textContent  = desc;
   };
 });
 

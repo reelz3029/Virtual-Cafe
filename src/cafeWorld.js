@@ -33,6 +33,9 @@ const TABLES = [
 ];
 const SEATS_PER = 4;
 const SEAT_R = 1.5;
+const SEAT_Y = 0.5;    // 의자 좌석 높이 (캐릭터가 여기 앉음)
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const mat = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
 
@@ -54,12 +57,19 @@ export class CafeWorld {
     this._catBase = null;      // 정규화된 GLB 원본(클론용)
     this._pendingPlayers = null; // 모델 로드 전 들어온 setPlayers 보류분
 
+    // 시점: 'iso' | 'desk' | 'fp'(1인칭)
+    this._view = 'iso';
+    this._mySeat = null;       // { x, z, baseYaw } — 1인칭 기준 좌석
+    this._fpYaw = 0; this._fpPitch = 0;
+    this._dragging = false;
+
     this._initRenderer();
     this._initCamera();
     this._initScene();
     this._buildRoom();
     this.scene.add(this._catGroup);
     this._loadCatModel();
+    this._bindInput();
 
     this._clock = new THREE.Clock();
     this._onResize = () => this._resize();
@@ -266,6 +276,36 @@ export class CafeWorld {
     const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.18), mat(0x7A8B5A));
     leaf.position.set(0.5, 1.55, 0.4); g.add(leaf);
     g.position.set(px, 0, pz); room.add(g);
+
+    // 좌석마다 의자 (테이블 중심을 향함)
+    for (let i = 0; i < SEATS_PER; i++) {
+      const ang = (i / SEATS_PER) * Math.PI * 2 + 0.5;
+      const cx = px + Math.cos(ang) * SEAT_R;
+      const cz = pz + Math.sin(ang) * SEAT_R;
+      this._buildChair(room, cx, cz, Math.atan2(px - cx, pz - cz));
+    }
+  }
+
+  // 의자 (등받이는 테이블 반대쪽) — faceAngle: 로컬 +z 가 테이블을 향함
+  _buildChair(room, x, z, faceAngle) {
+    const g = new THREE.Group();
+    const woodM = mat(C.tableLeg);
+    const padM = mat(0xB5705A);
+    // 좌판
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.46), padM);
+    seat.position.y = SEAT_Y; seat.castShadow = true; seat.receiveShadow = true; g.add(seat);
+    // 다리 4개
+    [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, SEAT_Y, 6), woodM);
+      leg.position.set(lx, SEAT_Y / 2, lz); leg.castShadow = true; g.add(leg);
+    });
+    // 등받이 (로컬 -z = 테이블 반대편)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.07), woodM);
+    back.position.set(0, SEAT_Y + 0.27, -0.2); back.castShadow = true; g.add(back);
+
+    g.position.set(x, 0, z);
+    g.rotation.y = faceAngle;
+    room.add(g);
   }
 
   // ── GLB 캐릭터 로드 (애니메이션은 재생하지 않음) ──────────
@@ -357,22 +397,37 @@ export class CafeWorld {
       const x = t.x + Math.cos(ang) * SEAT_R;
       const z = t.z + Math.sin(ang) * SEAT_R;
 
-      // GLB 캐릭터 (테이블 중심을 바라봄)
+      // GLB 캐릭터 (의자 위, 테이블 중심을 바라봄)
       const inst = this._makeCat(x, z, t.x, t.z);
+      inst.position.y = SEAT_Y;
       this._catGroup.add(inst);
       const phase = (hashStr(p.id) % 700) / 100;
-      this._cats.push({ obj: inst, baseY: 0, phase });
+      this._cats.push({ obj: inst, baseY: SEAT_Y, phase });
 
-      // 이름표
+      // 이름표 (의자에 앉은 높이 기준)
       const nt = nameTag(p.name);
-      nt.position.set(x, CAT_HEIGHT + 0.45, z);
+      nt.position.set(x, SEAT_Y + CAT_HEIGHT + 0.4, z);
       this._catGroup.add(nt);
 
-      if (p.id === this._myId) this._myTableIdx = tableIdx;
+      if (p.id === this._myId) {
+        this._myTableIdx = tableIdx;
+        this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
+      }
     });
   }
 
   setView(mode) {
+    this._view = mode;
+    if (mode === 'fp') {
+      // 1인칭: 내 좌석 기준 (없으면 기본 좌석)
+      this._fpYaw = 0; this._fpPitch = 0;
+      if (!this._mySeat) {
+        const t = TABLES[0], ang = 0.5;
+        const x = t.x + Math.cos(ang) * SEAT_R, z = t.z + Math.sin(ang) * SEAT_R;
+        this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
+      }
+      return;
+    }
     if (mode === 'desk') {
       const t = TABLES[this._myTableIdx] || TABLES[0];
       this._tgtPos = new THREE.Vector3(t.x + 3.7, 6.5, t.z + 7.7);
@@ -385,16 +440,60 @@ export class CafeWorld {
 
   toggleSunset() { this._isSunset = !this._isSunset; return this._isSunset; }
 
+  // ── 1인칭 입력 (마우스 드래그 + 방향키로 좌우·상하 둘러보기) ──
+  _bindInput() {
+    const YAW_LIM = 1.6, PITCH_LIM = 0.7;
+    const el = this.renderer.domElement;
+
+    this._onDown = (e) => { this._dragging = true; this._lx = e.clientX; this._ly = e.clientY; };
+    this._onUp   = () => { this._dragging = false; };
+    this._onMove = (e) => {
+      if (!this._dragging || this._view !== 'fp') return;
+      const dx = e.clientX - this._lx, dy = e.clientY - this._ly;
+      this._lx = e.clientX; this._ly = e.clientY;
+      this._fpYaw   = clamp(this._fpYaw   - dx * 0.004, -YAW_LIM, YAW_LIM);
+      this._fpPitch = clamp(this._fpPitch - dy * 0.003, -PITCH_LIM, PITCH_LIM);
+    };
+    this._onKey = (e) => {
+      if (this._view !== 'fp') return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      const S = 0.07;
+      if (e.key === 'ArrowLeft')  this._fpYaw   = clamp(this._fpYaw   + S, -YAW_LIM, YAW_LIM);
+      if (e.key === 'ArrowRight') this._fpYaw   = clamp(this._fpYaw   - S, -YAW_LIM, YAW_LIM);
+      if (e.key === 'ArrowUp')    this._fpPitch = clamp(this._fpPitch + S, -PITCH_LIM, PITCH_LIM);
+      if (e.key === 'ArrowDown')  this._fpPitch = clamp(this._fpPitch - S, -PITCH_LIM, PITCH_LIM);
+      if (e.key.startsWith('Arrow')) e.preventDefault();
+    };
+
+    el.addEventListener('mousedown', this._onDown);
+    window.addEventListener('mouseup', this._onUp);
+    window.addEventListener('mousemove', this._onMove);
+    window.addEventListener('keydown', this._onKey);
+  }
+
   // ── 루프 ─────────────────────────────────────────────────
   _animate() {
     this._raf = requestAnimationFrame(() => this._animate());
     const t = this._clock.getElapsedTime();
 
-    // 카메라 부드러운 보간
-    this._camPos.lerp(this._tgtPos, 0.045);
-    this._camTgt.lerp(this._tgtTgt, 0.045);
-    this.camera.position.copy(this._camPos);
-    this.camera.lookAt(this._camTgt);
+    // 카메라 — 1인칭은 직접 제어, iso/desk 는 부드러운 보간
+    if (this._view === 'fp' && this._mySeat) {
+      const s = this._mySeat;
+      const yaw = s.baseYaw + this._fpYaw, pitch = this._fpPitch;
+      const cp = Math.cos(pitch);
+      const dir = new THREE.Vector3(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+      const eye = new THREE.Vector3(s.x, SEAT_Y + 0.9, s.z);
+      this.camera.position.copy(eye);
+      this.camera.lookAt(eye.clone().add(dir));
+      this._camPos.copy(eye);                 // 복귀 시 보간 연속성
+      this._camTgt.copy(eye.clone().add(dir));
+    } else {
+      this._camPos.lerp(this._tgtPos, 0.045);
+      this._camTgt.lerp(this._tgtTgt, 0.045);
+      this.camera.position.copy(this._camPos);
+      this.camera.lookAt(this._camTgt);
+    }
 
     // 캐릭터 호흡 (바닥 안 꺼지게 위로만 살짝)
     this._cats.forEach(c => {
@@ -432,6 +531,10 @@ export class CafeWorld {
   dispose() {
     cancelAnimationFrame(this._raf);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('mouseup', this._onUp);
+    window.removeEventListener('mousemove', this._onMove);
+    window.removeEventListener('keydown', this._onKey);
+    this.renderer.domElement.removeEventListener('mousedown', this._onDown);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
