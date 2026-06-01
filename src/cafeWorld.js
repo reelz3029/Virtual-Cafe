@@ -46,6 +46,13 @@ const SEAT_Y = 0.7;    // 의자 좌석 높이 (캐릭터가 여기 앉음)
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+// 최단 경로 각도 보간 (래핑 처리)
+function lerpAngle(a, b, t) {
+  let d = b - a;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  return a + d * t;
+}
+
 const mat = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
 
 function hashStr(s) {
@@ -78,6 +85,11 @@ export class CafeWorld {
     this._lastSentYaw = null; this._lastSentT = 0;
     this._catById = new Map(); // id → 캐릭터 obj (회전만 갱신용)
     this._lastSig = null;      // 좌석 구성 시그니처
+
+    // 내 캐릭터 클릭-드래그 회전 (1인칭 아닐 때)
+    this._ray = new THREE.Raycaster();
+    this._ndc = new THREE.Vector2();
+    this._catDragging = false;
 
     this._initRenderer();
     this._initCamera();
@@ -495,12 +507,14 @@ export class CafeWorld {
     this._applyFacings(seated);
   }
 
-  // 동기화된 yaw 를 각 캐릭터에 적용 (내 캐릭터는 로컬 애니메이션이 담당)
+  // 동기화된 yaw 를 목표각으로 저장 (animate 에서 보간) — 내 캐릭터는 로컬 담당
   _applyFacings(seated) {
     seated.forEach(p => {
       if (p.id === this._myId) return;
       const inst = this._catById.get(p.id);
-      if (inst && typeof p.yaw === 'number') inst.rotation.y = p.yaw;
+      if (!inst || typeof p.yaw !== 'number') return;
+      if (inst.userData.targetYaw === undefined) inst.rotation.y = p.yaw; // 첫 등장 즉시
+      inst.userData.targetYaw = p.yaw;
     });
   }
 
@@ -541,14 +555,36 @@ export class CafeWorld {
     const YAW_LIM = 3, PITCH_LIM = 0.7;
     const el = this.renderer.domElement;
 
-    this._onDown = (e) => { this._dragging = true; this._lx = e.clientX; this._ly = e.clientY; };
-    this._onUp   = () => { this._dragging = false; };
+    this._onDown = (e) => {
+      this._dragging = true; this._lx = e.clientX; this._ly = e.clientY;
+      // 1인칭이 아닐 때: 내 캐릭터를 클릭했는지 판정 → 드래그로 회전
+      this._catDragging = false;
+      if (this._view !== 'fp' && this._myCatObj) {
+        this._ndc.set(
+          (e.clientX / window.innerWidth) * 2 - 1,
+          -(e.clientY / window.innerHeight) * 2 + 1,
+        );
+        this._ray.setFromCamera(this._ndc, this.camera);
+        if (this._ray.intersectObject(this._myCatObj, true).length > 0) {
+          this._catDragging = true;
+          el.style.cursor = 'grabbing';
+        }
+      }
+    };
+    this._onUp = () => { this._dragging = false; this._catDragging = false; el.style.cursor = ''; };
     this._onMove = (e) => {
-      if (!this._dragging || this._view !== 'fp') return;
+      if (!this._dragging) return;
       const dx = e.clientX - this._lx, dy = e.clientY - this._ly;
       this._lx = e.clientX; this._ly = e.clientY;
-      this._fpYaw   = clamp(this._fpYaw   - dx * 0.004, -YAW_LIM, YAW_LIM);
-      this._fpPitch = clamp(this._fpPitch - dy * 0.003, -PITCH_LIM, PITCH_LIM);
+      if (this._view === 'fp') {
+        this._fpYaw   = clamp(this._fpYaw   - dx * 0.004, -YAW_LIM, YAW_LIM);
+        this._fpPitch = clamp(this._fpPitch - dy * 0.003, -PITCH_LIM, PITCH_LIM);
+        return;
+      }
+      // 1인칭 아님: 내 캐릭터 클릭-드래그 회전
+      if (this._catDragging && this._myCatObj) {
+        this._myCatObj.rotation.y -= dx * 0.01;
+      }
     };
     this._onKey = (e) => {
       if (this._view !== 'fp') return;
@@ -601,6 +637,13 @@ export class CafeWorld {
     // 캐릭터 호흡 (바닥 안 꺼지게 위로만 살짝)
     this._cats.forEach(c => {
       c.obj.position.y = c.baseY + (Math.sin(t * 1.5 + c.phase) * 0.5 + 0.5) * 0.03;
+    });
+
+    // 다른 플레이어 캐릭터 회전 보간 (동기화된 목표각으로 부드럽게)
+    this._catById.forEach((obj, id) => {
+      if (id === this._myId) return;
+      const tgt = obj.userData.targetYaw;
+      if (typeof tgt === 'number') obj.rotation.y = lerpAngle(obj.rotation.y, tgt, 0.18);
     });
 
     // 내 캐릭터 방향(yaw)을 다른 클라이언트로 전송 — 변할 때만, 쓰로틀(180ms)
