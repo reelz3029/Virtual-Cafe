@@ -20,16 +20,17 @@ import * as THREE from 'three';
 import { ROOM_CONFIG } from './roomAllocator.js';
 
 // 고정 NPC 정의 — 위치는 카페 공간 기준(필요시 cafeScene 좌표에 맞게 조정)
+// 위치는 cafeScene 룸 좌표 기준 (카운터 x4·z-6, 창=좌벽, 테이블 z0~4)
 const NPC_DEFS = [
-  // 카운터 바리스타
+  // 카운터 바리스타 (카운터 뒤, 상반신 노출)
   { name: '점장냥', fur: '#8B6B4A', patt: '#5A3E28', type: 'tabby', item: 'cup',
-    pos: { x: 4.0, y: 2.6, z: -4.0 }, role: 'barista' },
+    pos: { x: 4.0, y: 1.5, z: -5.6 }, role: 'barista' },
   // 창가에서 조는 고양이
   { name: '낮잠이', fur: '#F2E3CC', patt: '', type: 'solid', item: 'none',
-    pos: { x: -5.5, y: 1.7, z: 2.0 }, role: 'sleeper' },
+    pos: { x: -6.6, y: 0.7, z: 2.2 }, role: 'sleeper' },
   // 책 읽는 단골
   { name: '책벌레', fur: '#4A423A', patt: '', type: 'tuxedo', item: 'book',
-    pos: { x: 3.0, y: 1.7, z: 3.5 }, role: 'reader' },
+    pos: { x: -1.6, y: 0.7, z: -2.2 }, role: 'reader' },
 ];
 
 export class NpcBuffer {

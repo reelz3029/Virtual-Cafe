@@ -225,10 +225,11 @@ export class WorldRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(W, H);
-    this.renderer.setClearColor(0xF2E3CC, 1);   // 웜 크림 (햇살 벽)
-    this.renderer.shadowMap.enabled = false;
-    this.renderer.toneMapping = THREE.NoToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.setClearColor(0x3A2418, 1);   // 황혼 배경
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
   }
 
   _initCamera() {

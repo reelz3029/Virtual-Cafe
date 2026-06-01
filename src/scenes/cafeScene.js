@@ -18,6 +18,8 @@ import {
   createCoffeeSprite,
 } from '../utils/characterRenderer.js';
 import { store } from '../store/gameStore.js';
+import { NpcBuffer } from '../systems/npcBuffer.js';
+import { tableCountForRoom } from '../systems/roomAllocator.js';
 
 // ── 룸 치수 ────────────────────────────────────────────────
 const ROOM_HALF   = 8;     // 바닥 반폭 (x,z ∈ [-8, 8])
@@ -29,10 +31,13 @@ const SEAT_DIST   = 0.82;
 // 카메라 팬 범위 — 룸 안에서만 (worldRenderer가 사용)
 const PAN_LIMIT   = 4.5;
 
-// 8 테이블 고정 배치 (2행 × 4열) — 벽/카운터 피해 중앙 개방부
+// 테이블 후보 위치 — 앞쪽 N개만 사용(정원=ROOM_CONFIG.capacity 기준).
+// 앞 4개가 2×2를 이루도록 정렬 (정원이 작아도 균형 있게 보이게)
 const TABLE_SPOTS = [
-  { x: -4.5, z: 0.5 }, { x: -1.5, z: 0.5 }, { x: 1.5, z: 0.5 }, { x: 4.0, z: 0.5 },
-  { x: -4.5, z: 4.0 }, { x: -1.5, z: 4.0 }, { x: 1.5, z: 4.0 }, { x: 4.0, z: 4.0 },
+  { x: -3.5, z: 0.0 }, { x: 1.0, z: 0.0 },
+  { x: -3.5, z: 4.0 }, { x: 1.0, z: 4.0 },
+  { x: 4.5, z: 0.0 }, { x: 4.5, z: 4.0 },
+  { x: -1.5, z: -2.4 }, { x: 2.5, z: -2.4 },
 ];
 
 // ── 따뜻한 클래식 우디 카페 팔레트 (황혼) ────────────────────
@@ -83,7 +88,6 @@ export class CafeScene {
     this.tables           = new Map();
     this.characterSprites = new Map();
     this._tableCount      = 0;
-    this._npcs            = [];     // 분위기용 NPC 고양이 스프라이트
     this._dust            = null;
     this._pendantLights   = [];
 
@@ -91,10 +95,18 @@ export class CafeScene {
     this._buildRoom();
     this._buildCounter();
     this._buildTables();
-    this._buildAmbientCats();
 
-    // 룸은 유한 — 프러스텀 컬링 비활성 불필요하지만, 스프라이트 팝 방지용 유지
-    this.scene.traverse(obj => { if (obj.isMesh) obj.frustumCulled = false; });
+    // 빈 방 완충용 NPC 고양이 (npcBuffer) — 실제 인원 적을 때만 표시
+    this._npc = new NpcBuffer(this.scene);
+    this._npc.spawn();
+
+    // 컬링 비활성 + 그림자 캐스트/리시브 일괄 설정 (작은 룸이라 비용 적음)
+    this.scene.traverse(obj => {
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+    });
   }
 
   get tableCount() { return this._tableCount; }
@@ -107,27 +119,31 @@ export class CafeScene {
       .filter(o => o.isLight)
       .forEach(l => this.scene.remove(l));
 
-    // 따뜻한 황혼 배경 + 가벼운 안개 (닫힌 룸이라 옅게)
-    this.scene.background = new THREE.Color(0xEBC9A0);
-    this.scene.fog = new THREE.Fog(0xE8C49A, 26, 52);
+    // 황혼 배경 + 따뜻한 안개
+    this.scene.background = new THREE.Color(0x3A2418);
+    this.scene.fog = new THREE.Fog(0x3A2418, 24, 56);
 
-    // 전역 앰비언트 — 따뜻하고 밝게 (어둡지 않게)
-    this.scene.add(new THREE.AmbientLight(0xFFE6C0, 0.95));
+    // 앰비언트 (황혼) — 사양서값
+    this.scene.add(new THREE.AmbientLight(0xFFE0B0, 0.55));
 
-    // 메인: 창으로 비스듬히 드는 황혼빛 (좌벽 측 → 우하향)
-    const sun = new THREE.DirectionalLight(0xFFB066, 1.5);
-    sun.position.set(-12, 8, 6);
+    // 메인: 창으로 낮게 드는 황혼빛 — 그림자 ON
+    const sun = new THREE.DirectionalLight(0xFF9D4D, 2.4);
+    sun.position.set(-14, 9, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far  = 60;
+    sun.shadow.camera.left   = -ROOM_HALF - 3;
+    sun.shadow.camera.right  =  ROOM_HALF + 3;
+    sun.shadow.camera.top    =  ROOM_HALF + 3;
+    sun.shadow.camera.bottom = -ROOM_HALF - 3;
+    sun.shadow.bias = -0.0006;
     this.scene.add(sun);
 
-    // 실내 따뜻한 보조광
-    const warmFill = new THREE.PointLight(0xFFC880, 0.9, 36);
-    warmFill.position.set(2, 6, 2);
+    // 실내 따뜻한 보조 포인트
+    const warmFill = new THREE.PointLight(0xFFB860, 1.3, 30);
+    warmFill.position.set(3, 6, 2);
     this.scene.add(warmFill);
-
-    // 반대편 쿨 바운스 — 그림자 면이 죽지 않게
-    const coolFill = new THREE.DirectionalLight(0xBFC8D8, 0.28);
-    coolFill.position.set(9, 6, -6);
-    this.scene.add(coolFill);
   }
 
   // ── 룸 구조: 바닥 + 벽 2면 + 천장 보 + 창 + 책장 + 먼지 ─────
@@ -329,7 +345,7 @@ export class CafeScene {
     );
     bulb.position.y = WALL_H - 2.65;
     g.add(bulb);
-    const light = new THREE.PointLight(0xFFCB7A, 0.55, 10);
+    const light = new THREE.PointLight(0xFFCB7A, 0.9, 12);
     light.position.y = WALL_H - 2.8;
     g.add(light);
     this._pendantLights.push(light);
@@ -404,11 +420,14 @@ export class CafeScene {
 
   // ── 테이블 8개 고정 배치 ──────────────────────────────────
   _buildTables() {
-    TABLE_SPOTS.forEach((spot, i) => {
+    // 정원(ROOM_CONFIG.capacity)에서 산출한 테이블 수만큼만 배치
+    const count = Math.min(tableCountForRoom(), TABLE_SPOTS.length);
+    for (let i = 0; i < count; i++) {
+      const spot = TABLE_SPOTS[i];
       const padCol = PAD_PALETTE[i % PAD_PALETTE.length];
       this._createTable(`table_${i}`, spot.x, spot.z, SEATS_PER_TABLE, padCol);
-    });
-    this._tableCount = TABLE_SPOTS.length;
+    }
+    this._tableCount = count;
   }
 
   _createTable(tableId, x, z, seatCount = SEATS_PER_TABLE, padColor = C.chairPad) {
@@ -508,29 +527,6 @@ export class CafeScene {
       group.add(l);
     });
     return group;
-  }
-
-  // ── 분위기용 NPC 고양이 (완전히 혼자가 아닌 느낌) ──────────
-  _buildAmbientCats() {
-    const defs = [
-      { name: '바리스타', body: '#E8C49A', acc: ['apron'], x: 4.0, y: 0.72, z: -5.7 },
-      { name: '나른',     body: '#E8B87A', acc: [],        x: -6.3, y: 0.55, z: 2.4 }, // 창가에서 조는 고양이
-      { name: '뜸',       body: '#4A423A', acc: [],        x: -6.0, y: 0.55, z: -1.0 },
-    ];
-    defs.forEach(d => {
-      const g = new THREE.Group();
-      const sprite = createCharacterSprite({ bodyColor: d.body, accessories: d.acc }, d.name);
-      sprite.scale.set(0.78, 0.95, 1);
-      sprite.position.y = d.y;
-      g.add(sprite);
-      const tag = createNameTag(`🐱 ${d.name}`, false);
-      tag.position.y = d.y + 0.78;
-      g.add(tag);
-      g.traverse(o => { if (o.isSprite) o.frustumCulled = false; });
-      g.position.set(d.x, 0, d.z);
-      this.scene.add(g);
-      this._npcs.push({ group: g, sprite, baseY: d.y, phase: Math.random() * 7 });
-    });
   }
 
   // ── 무한랩 비활성 (닫힌 룸) — 호출돼도 아무것도 안 함 ───────
@@ -647,10 +643,11 @@ export class CafeScene {
       if (id === myId) sprite.position.y = 0.45 + Math.sin(time * 1.6) * 0.03;
     });
 
-    // NPC 고양이 호흡
-    this._npcs.forEach(n => {
-      n.sprite.position.y = n.baseY + Math.sin(time * 1.4 + n.phase) * 0.025;
-    });
+    // 빈 방 완충 NPC — 실제 인원수에 따라 표시 개수 조절 + 애니메이션
+    if (this._npc) {
+      this._npc.updateByOccupancy(store.getState().onlineUsers.length);
+      this._npc.update(time);
+    }
 
     // 먼지 천천히 상승
     if (this._dust) {
@@ -675,10 +672,10 @@ export class CafeScene {
           : obj.material.dispose();
       }
     });
+    this._npc?.dispose();
     this._dust?.geometry?.dispose();
     this.tables.clear();
     this.characterSprites.clear();
-    this._npcs = [];
     _matCache.clear();
   }
 }
