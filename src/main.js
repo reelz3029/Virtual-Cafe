@@ -43,6 +43,8 @@ async function onLogin(user) {
   authModal?.destroy(); authModal = null;
   showUI(true);
   world.setMyId(user.id);
+  // 내 캐릭터 회전을 presence 로 전송 (다른 클라이언트에 동기화)
+  world.onFacing = (yaw) => presenceManager.setFacing(yaw);
 
   const { scene, mood } = await roomAllocator.allocate('cafe');
   currentMood = mood;
@@ -51,7 +53,7 @@ async function onLogin(user) {
     const others = presenceManager.getOthers();
     const players = [
       { id: user.id, name: user.username },
-      ...others.map(o => ({ id: o.id, name: o.username })),
+      ...others.map(o => ({ id: o.id, name: o.username, yaw: o.yaw })),
     ];
     world.setPlayers(players);
     updateTopbar();

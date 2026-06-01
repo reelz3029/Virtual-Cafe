@@ -133,6 +133,13 @@ class PresenceManager {
     set(this._myRef, { ...this._myData, joinedAt: serverTimestamp() });
   }
 
+  /** 내 캐릭터 바라보는 방향(yaw) 갱신 — 호출 측에서 쓰로틀할 것 */
+  setFacing(yaw) {
+    if (!this._myRef || !this._myData) return;
+    this._myData = { ...this._myData, yaw };
+    set(this._myRef, { ...this._myData, joinedAt: serverTimestamp() });
+  }
+
   /**
    * 현재 씬에 있는 다른 유저 목록 (본인 제외)
    */
@@ -145,6 +152,7 @@ class PresenceManager {
         avatar:    e.avatar    ?? {},
         tableId:   e.tableId   ?? null,
         seatIndex: e.seatIndex ?? null,
+        yaw:       typeof e.yaw === 'number' ? e.yaw : null,
         isReal:    true,
         isGuest:   e.isGuest   || false,
       }));

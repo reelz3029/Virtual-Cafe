@@ -73,6 +73,12 @@ export class CafeWorld {
     this._fpYaw = 0; this._fpPitch = 0;
     this._dragging = false;
 
+    // 회전 동기화 (다른 클라이언트에 내 yaw 전송)
+    this.onFacing = null;      // (yaw) => void  — main 에서 presence 로 연결
+    this._lastSentYaw = null; this._lastSentT = 0;
+    this._catById = new Map(); // id → 캐릭터 obj (회전만 갱신용)
+    this._lastSig = null;      // 좌석 구성 시그니처
+
     this._initRenderer();
     this._initCamera();
     this._initScene();
@@ -422,10 +428,27 @@ export class CafeWorld {
   // ── 외부: 내 id / 접속자 목록 / 시점 / 황혼 ────────────────
   setMyId(id) { this._myId = id; }
 
-  /** @param {{id:string,name:string}[]} players 같은 방 접속자(나 포함) */
+  /** @param {{id:string,name:string,yaw?:number}[]} players 같은 방 접속자(나 포함) */
   setPlayers(players) {
     // 모델 로드 전이면 보류 후 로드 완료 시 반영
     if (!this._catBase) { this._pendingPlayers = players; return; }
+
+    // 모든 클라이언트가 동일한 좌석 배정을 갖도록 id 기준 전역 정렬
+    const sorted = players
+      .slice(0, TABLES.length * SEATS_PER)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const ambiance = sorted.length <= 1
+      ? [{ id: '__amb1', name: '단골' }, { id: '__amb2', name: '책벌레' }]
+      : [];
+    const seated = [...sorted, ...ambiance];
+
+    // 구성(누가 어느 자리)이 같으면 리빌드 없이 회전만 갱신 (성능/깜빡임 방지)
+    const sig = seated.map(p => p.id).join(',');
+    if (sig === this._lastSig && this._catById.size) {
+      this._applyFacings(seated);
+      return;
+    }
+    this._lastSig = sig;
 
     // 기존 플레이어 캐릭터/이름표 제거 (바리스타는 scene 에 별도 보존)
     while (this._catGroup.children.length) {
@@ -438,19 +461,10 @@ export class CafeWorld {
       c.material?.dispose?.();
     }
     this._cats = this._baristaCat ? [this._baristaCat] : [];
-    this._myCatObj = null;   // 재구성되므로 참조 초기화
+    this._myCatObj = null;
+    this._catById.clear();
 
-    // 모든 클라이언트가 동일한 좌석 배정을 갖도록 id 기준 전역 정렬
-    // (자기 자신을 앞에 두면 전원이 같은 자리에 고정되는 버그 방지)
-    const sorted = players
-      .slice(0, TABLES.length * SEATS_PER)
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    // 분위기 보강: 혼자/소수일 때 더미 캐릭터 약간 추가
-    const ambiance = sorted.length <= 1
-      ? [{ id: '__amb1', name: '단골' }, { id: '__amb2', name: '책벌레' }]
-      : [];
-
-    [...sorted, ...ambiance].forEach((p, gi) => {
+    seated.forEach((p, gi) => {
       const tableIdx = Math.floor(gi / SEATS_PER) % TABLES.length;
       const seatIdx = gi % SEATS_PER;
       const t = TABLES[tableIdx];
@@ -464,6 +478,7 @@ export class CafeWorld {
       this._catGroup.add(inst);
       const phase = (hashStr(p.id) % 700) / 100;
       this._cats.push({ obj: inst, baseY: SEAT_Y, phase });
+      this._catById.set(p.id, inst);
 
       // 이름표 (의자에 앉은 높이 기준)
       const nt = nameTag(p.name);
@@ -475,6 +490,17 @@ export class CafeWorld {
         this._mySeat = { x, z, baseYaw: Math.atan2(t.x - x, t.z - z) };
         this._myCatObj = inst;
       }
+    });
+
+    this._applyFacings(seated);
+  }
+
+  // 동기화된 yaw 를 각 캐릭터에 적용 (내 캐릭터는 로컬 애니메이션이 담당)
+  _applyFacings(seated) {
+    seated.forEach(p => {
+      if (p.id === this._myId) return;
+      const inst = this._catById.get(p.id);
+      if (inst && typeof p.yaw === 'number') inst.rotation.y = p.yaw;
     });
   }
 
@@ -576,6 +602,17 @@ export class CafeWorld {
     this._cats.forEach(c => {
       c.obj.position.y = c.baseY + (Math.sin(t * 1.5 + c.phase) * 0.5 + 0.5) * 0.03;
     });
+
+    // 내 캐릭터 방향(yaw)을 다른 클라이언트로 전송 — 변할 때만, 쓰로틀(180ms)
+    if (this.onFacing && this._myCatObj) {
+      const y = this._myCatObj.rotation.y;
+      const now = performance.now();
+      if ((this._lastSentYaw === null || Math.abs(y - this._lastSentYaw) > 0.05)
+          && now - this._lastSentT > 180) {
+        this._lastSentYaw = y; this._lastSentT = now;
+        this.onFacing(y);
+      }
+    }
 
     // 먼지 상승
     const dp = this._dust.geometry.attributes.position.array;
