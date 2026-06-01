@@ -9,8 +9,15 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 const FLOOR = 16;
+
+// 캐릭터 GLB — "cute cat in cute banana" (걷기 애니 포함, 재생 안 함)
+const CAT_GLB     = '/models/cute_cat_in_cute_banana.glb';
+const CAT_HEIGHT  = 1.25;   // 목표 높이(월드 유닛)
+const CAT_FACE    = 0;      // 모델 정면 보정각(필요시 Math.PI로 뒤집기)
 
 const C = {
   floor1: 0xC9A06A, floor2: 0xB8895C, wall: 0xD9B98C, wallBack: 0xCBA877,
@@ -27,17 +34,6 @@ const TABLES = [
 const SEATS_PER = 4;
 const SEAT_R = 1.5;
 
-// 고양이 외형 프리셋 (id 해시로 결정론적 배정)
-const FURS = [
-  { fur: '#E8B87A', patt: '#C4823E', type: 'tabby'  },
-  { fur: '#F2E3CC', patt: '',        type: 'solid'  },
-  { fur: '#F4ECDC', patt: '#D89248', type: 'calico' },
-  { fur: '#4A423A', patt: '',        type: 'tuxedo' },
-  { fur: '#D98E4E', patt: '',        type: 'solid'  },
-  { fur: '#C9A06A', patt: '#7A5230', type: 'tabby'  },
-];
-const ITEMS = ['laptop', 'book', 'cup', 'knit', 'sketch'];
-
 const mat = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
 
 function hashStr(s) {
@@ -52,16 +48,18 @@ export class CafeWorld {
     this._myId = null;
     this._myTableIdx = 0;
     this._catGroup = new THREE.Group();
-    this._cats = [];          // { sprite, baseY, phase }
+    this._cats = [];           // { obj, baseY, phase }
     this._isSunset = true;
     this._sunsetMix = 1;
+    this._catBase = null;      // 정규화된 GLB 원본(클론용)
+    this._pendingPlayers = null; // 모델 로드 전 들어온 setPlayers 보류분
 
     this._initRenderer();
     this._initCamera();
     this._initScene();
     this._buildRoom();
-    this._buildBarista();
     this.scene.add(this._catGroup);
+    this._loadCatModel();
 
     this._clock = new THREE.Clock();
     this._onResize = () => this._resize();
@@ -83,8 +81,8 @@ export class CafeWorld {
 
   // ── 카메라 (퍼스펙티브 아이소) ────────────────────────────
   _initCamera() {
-    this.camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
-    this.ISO_POS = new THREE.Vector3(15, 14, 15);
+    this.camera = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.1, 100);
+    this.ISO_POS = new THREE.Vector3(15, 10, 15);
     this.ISO_TGT = new THREE.Vector3(0, 1.5, 0);
     this.camera.position.copy(this.ISO_POS);
     this._camPos = this.ISO_POS.clone();
@@ -172,15 +170,6 @@ export class CafeWorld {
     room.add(sky);
     this.windowGlow = sky;            // 황혼/주간 토글이 하늘 색을 틴트
 
-    // 먼 건물/지붕 실루엣 (창밖 풍경)
-    [[-3.5, 2.4, 3.5], [0.6, 3.4, 3.0], [4.2, 1.8, 4.0]].forEach(([z, h, w]) => {
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(0.6, h, w),
-        new THREE.MeshBasicMaterial({ color: 0x7A5640, fog: false }),
-      );
-      b.position.set(LX - 3.8, h / 2 + 0.4, z);
-      room.add(b);
-    });
     // 얇은 창 가장자리 프레임(개구부 테두리만 — 유리는 없음)
     const edgeMat = mat(0x4A3320);
     const edge = (h, d, y, z) => {
@@ -279,15 +268,58 @@ export class CafeWorld {
     g.position.set(px, 0, pz); room.add(g);
   }
 
+  // ── GLB 캐릭터 로드 (애니메이션은 재생하지 않음) ──────────
+  _loadCatModel() {
+    new GLTFLoader().load(CAT_GLB, (gltf) => {
+      const model = gltf.scene;
+
+      // 정규화: 목표 높이로 스케일, x/z 중심정렬, 바닥을 y=0 에
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const s = CAT_HEIGHT / (size.y || 1);
+      model.scale.setScalar(s);
+      const box2 = new THREE.Box3().setFromObject(model);
+      const c = box2.getCenter(new THREE.Vector3());
+      model.position.x -= c.x;
+      model.position.z -= c.z;
+      model.position.y -= box2.min.y;
+
+      // 그림자 + 머테리얼 보정(메탈 0 → 어둡게 죽는 것 방지)
+      model.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.receiveShadow = false;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(mm => { if (mm && 'metalness' in mm) mm.metalness = 0; });
+      });
+
+      // 원본은 클론 기준이 되도록 Group 으로 감싸 둠 (애니메이션 믹서 생성 안 함)
+      this._catBase = new THREE.Group();
+      this._catBase.add(model);
+
+      // 바리스타 배치 + 보류된 플레이어 반영
+      this._placeBarista();
+      if (this._pendingPlayers) { this.setPlayers(this._pendingPlayers); this._pendingPlayers = null; }
+    }, undefined, (err) => {
+      console.error('[CafeWorld] 캐릭터 GLB 로드 실패:', err);
+    });
+  }
+
+  // GLB 클론 인스턴스 1개 생성 (좌석 위치/방향)
+  _makeCat(x, z, faceTargetX, faceTargetZ) {
+    const inst = cloneSkeleton(this._catBase);
+    inst.position.set(x, 0, z);
+    inst.rotation.y = Math.atan2(faceTargetX - x, faceTargetZ - z) + CAT_FACE;
+    return inst;
+  }
+
   // ── 카운터 바리스타 (상시 NPC) ───────────────────────────
-  _buildBarista() {
-    const tex = catTexture('#8B6B4A', '#5A3E28', 'tabby', 'cup', 'sip');
-    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-    spr.scale.set(1.5, 1.6, 1);
-    spr.position.set(3.6, 2.85, -4);
-    spr.userData = { baseY: 2.85, phase: 1.2 };
-    this.scene.add(spr);
-    this._baristaCat = { sprite: spr, baseY: 2.85, phase: 1.2 };
+  _placeBarista() {
+    if (!this._catBase) return;
+    const inst = this._makeCat(3.6, -4, 0, 0); // 실내(원점)를 바라봄
+    inst.position.y = 2.1;                       // 카운터 위
+    this.scene.add(inst);
+    this._baristaCat = { obj: inst, baseY: 2.1, phase: 1.2 };
     this._cats.push(this._baristaCat);
   }
 
@@ -296,18 +328,25 @@ export class CafeWorld {
 
   /** @param {{id:string,name:string}[]} players 같은 방 접속자(나 포함) */
   setPlayers(players) {
-    // 기존 플레이어 고양이/이름표 제거 (바리스타는 별도 보존)
+    // 모델 로드 전이면 보류 후 로드 완료 시 반영
+    if (!this._catBase) { this._pendingPlayers = players; return; }
+
+    // 기존 플레이어 캐릭터/이름표 제거 (바리스타는 scene 에 별도 보존)
     while (this._catGroup.children.length) {
       const c = this._catGroup.children.pop();
+      c.traverse?.(o => {
+        o.geometry?.dispose?.();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose?.());
+      });
       c.material?.map?.dispose?.();
       c.material?.dispose?.();
     }
     this._cats = this._baristaCat ? [this._baristaCat] : [];
 
     const list = players.slice(0, TABLES.length * SEATS_PER);
-    // 분위기 보강: 혼자/소수일 때 더미 고양이 약간 추가
+    // 분위기 보강: 혼자/소수일 때 더미 캐릭터 약간 추가
     const ambiance = list.length <= 1
-      ? [{ id: '__amb1', name: '단골', amb: true }, { id: '__amb2', name: '책벌레', amb: true }]
+      ? [{ id: '__amb1', name: '단골' }, { id: '__amb2', name: '책벌레' }]
       : [];
 
     [...list, ...ambiance].forEach((p, gi) => {
@@ -318,25 +357,17 @@ export class CafeWorld {
       const x = t.x + Math.cos(ang) * SEAT_R;
       const z = t.z + Math.sin(ang) * SEAT_R;
 
-      const h = hashStr(p.id);
-      const f = FURS[h % FURS.length];
-      const item = ITEMS[h % ITEMS.length];
-      const expr = (h % 3 === 0) ? 'study' : (h % 3 === 1 ? 'sip' : 'normal');
-
-      const tex = catTexture(f.fur, f.patt, f.type, item, expr);
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-      spr.scale.set(1.5, 1.6, 1);
-      spr.position.set(x, 1.7, z);
-      spr.userData = { baseY: 1.7, phase: (h % 700) / 100 };
-      this._catGroup.add(spr);
-      this._cats.push({ sprite: spr, baseY: 1.7, phase: spr.userData.phase });
+      // GLB 캐릭터 (테이블 중심을 바라봄)
+      const inst = this._makeCat(x, z, t.x, t.z);
+      this._catGroup.add(inst);
+      const phase = (hashStr(p.id) % 700) / 100;
+      this._cats.push({ obj: inst, baseY: 0, phase });
 
       // 이름표
       const nt = nameTag(p.name);
-      nt.position.set(x, 2.7, z);
+      nt.position.set(x, CAT_HEIGHT + 0.45, z);
       this._catGroup.add(nt);
 
-      // 내 테이블 기록 (내 자리 시점용)
       if (p.id === this._myId) this._myTableIdx = tableIdx;
     });
   }
@@ -365,8 +396,10 @@ export class CafeWorld {
     this.camera.position.copy(this._camPos);
     this.camera.lookAt(this._camTgt);
 
-    // 고양이 호흡
-    this._cats.forEach(c => { c.sprite.position.y = c.baseY + Math.sin(t * 1.5 + c.phase) * 0.04; });
+    // 캐릭터 호흡 (바닥 안 꺼지게 위로만 살짝)
+    this._cats.forEach(c => {
+      c.obj.position.y = c.baseY + (Math.sin(t * 1.5 + c.phase) * 0.5 + 0.5) * 0.03;
+    });
 
     // 먼지 상승
     const dp = this._dust.geometry.attributes.position.array;
@@ -401,85 +434,6 @@ export class CafeWorld {
     window.removeEventListener('resize', this._onResize);
     this.renderer.dispose();
     this.renderer.domElement.remove();
-  }
-}
-
-// ── 고양이 빌보드 텍스처 (데모 동일 + 표정) ─────────────────
-function catTexture(fur, patt, type, item, expr = 'normal') {
-  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
-  const x = cv.getContext('2d'); const cx = 64; const OUT = '#3A2418';
-  x.lineJoin = x.lineCap = 'round';
-  // 그림자
-  x.fillStyle = 'rgba(58,36,24,.16)'; x.beginPath(); x.ellipse(cx, 118, 22, 5, 0, 0, 7); x.fill();
-  // 꼬리
-  x.strokeStyle = OUT; x.lineWidth = 10; x.beginPath(); x.moveTo(cx + 16, 96); x.quadraticCurveTo(cx + 40, 78, cx + 30, 52); x.stroke();
-  x.strokeStyle = fur; x.lineWidth = 5.5; x.stroke();
-  // 몸통
-  ell(x, cx, 92, 26, 24, fur, OUT, 4);
-  // 앞발
-  ell(x, cx - 16, 110, 11, 8, fur, OUT, 3.5); ell(x, cx + 16, 110, 11, 8, fur, OUT, 3.5);
-  // 사물
-  drawItem(x, cx, item);
-  // 귀
-  ear(x, cx - 26, 32, -0.25, fur, OUT); ear(x, cx + 26, 32, 0.25, fur, OUT);
-  // 머리
-  circ(x, cx, 52, 32, fur, OUT, 4);
-  // 무늬
-  if (type === 'tabby') {
-    x.strokeStyle = patt; x.lineWidth = 4; x.globalAlpha = .8;
-    for (let i = -1; i <= 1; i++) { x.beginPath(); x.moveTo(cx + i * 9, 24); x.lineTo(cx + i * 9, 40); x.stroke(); }
-    x.globalAlpha = 1;
-  }
-  if (type === 'tuxedo') { x.fillStyle = '#F2E8DC'; x.beginPath(); x.ellipse(cx, 86, 15, 18, 0, 0, 7); x.fill(); }
-  if (type === 'calico') {
-    x.fillStyle = patt; x.beginPath(); x.ellipse(cx - 16, 42, 13, 12, 0, 0, 7); x.fill();
-    x.fillStyle = '#3E362E'; x.beginPath(); x.ellipse(cx + 14, 58, 11, 13, 0, 0, 7); x.fill();
-  }
-  // 얼굴 (표정)
-  x.strokeStyle = OUT; x.lineWidth = 3;
-  if (expr === 'sip') {
-    x.beginPath(); x.arc(cx - 11, 53, 5, Math.PI * 1.1, Math.PI * 1.9); x.stroke();
-    x.beginPath(); x.arc(cx + 11, 53, 5, Math.PI * 1.1, Math.PI * 1.9); x.stroke();
-  } else {
-    x.beginPath(); x.arc(cx - 11, 52, 5, Math.PI * .15, Math.PI * .85); x.stroke();
-    x.beginPath(); x.arc(cx + 11, 52, 5, Math.PI * .15, Math.PI * .85); x.stroke();
-    if (expr === 'study') { x.fillStyle = '#F4ECDC'; drawHeart(x, cx + 26, 34); }
-  }
-  // 볼
-  x.fillStyle = 'rgba(220,150,110,.3)';
-  x.beginPath(); x.ellipse(cx - 20, 60, 7, 4, 0, 0, 7); x.fill();
-  x.beginPath(); x.ellipse(cx + 20, 60, 7, 4, 0, 0, 7); x.fill();
-  // 코
-  x.fillStyle = '#C08070'; x.beginPath(); x.moveTo(cx, 62); x.lineTo(cx - 3, 66); x.lineTo(cx + 3, 66); x.fill();
-
-  const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter; return tex;
-}
-
-function ell(x, cx, cy, rx, ry, f, s, lw) { x.fillStyle = f; x.strokeStyle = s; x.lineWidth = lw; x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, 7); x.fill(); x.stroke(); }
-function circ(x, cx, cy, r, f, s, lw) { x.fillStyle = f; x.strokeStyle = s; x.lineWidth = lw; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke(); }
-function ear(x, px, py, rot, f, s) { x.save(); x.translate(px, py); x.rotate(rot); x.fillStyle = f; x.strokeStyle = s; x.lineWidth = 4; x.beginPath(); x.moveTo(-13, 12); x.quadraticCurveTo(-3, -16, 12, 9); x.closePath(); x.fill(); x.stroke(); x.fillStyle = '#E8C0A8'; x.beginPath(); x.moveTo(-7, 9); x.quadraticCurveTo(-1, -6, 7, 7); x.closePath(); x.fill(); x.restore(); }
-function drawHeart(x, px, py) { x.beginPath(); x.moveTo(px, py + 3); x.bezierCurveTo(px - 4, py - 2, px - 5, py + 1, px, py + 5); x.bezierCurveTo(px + 5, py + 1, px + 4, py - 2, px, py + 3); x.fill(); }
-function drawItem(x, cx, item) {
-  if (item === 'laptop') {
-    x.fillStyle = '#5A6B7A'; x.strokeStyle = '#3A2418'; x.lineWidth = 3;
-    x.beginPath(); x.rect(cx - 12, 98, 24, 14); x.fill(); x.stroke();
-    x.fillStyle = '#8FA8C8'; x.fillRect(cx - 9, 100, 18, 9);
-  } else if (item === 'book') {
-    x.fillStyle = '#A6543E'; x.strokeStyle = '#3A2418'; x.lineWidth = 3;
-    x.beginPath(); x.rect(cx - 13, 100, 26, 11); x.fill(); x.stroke();
-    x.strokeStyle = '#F2E8DC'; x.lineWidth = 1; x.beginPath(); x.moveTo(cx, 101); x.lineTo(cx, 110); x.stroke();
-  } else if (item === 'cup') {
-    x.fillStyle = '#C89A6A'; x.strokeStyle = '#3A2418'; x.lineWidth = 3;
-    x.beginPath(); x.rect(cx - 8, 101, 16, 11); x.fill(); x.stroke();
-    x.strokeStyle = 'rgba(143,168,154,.7)'; x.lineWidth = 2;
-    x.beginPath(); x.moveTo(cx - 2, 99); x.quadraticCurveTo(cx - 5, 93, cx - 2, 88); x.stroke();
-  } else if (item === 'knit') {
-    x.fillStyle = '#B5705A'; x.beginPath(); x.arc(cx, 106, 9, 0, 7); x.fill();
-    x.strokeStyle = '#9A8C6E'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx + 6, 104); x.lineTo(cx + 16, 98); x.stroke();
-  } else if (item === 'sketch') {
-    x.fillStyle = '#F2E8DC'; x.strokeStyle = '#3A2418'; x.lineWidth = 3;
-    x.beginPath(); x.rect(cx - 12, 100, 24, 12); x.fill(); x.stroke();
-    x.strokeStyle = '#7B8B5A'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(cx - 7, 107); x.lineTo(cx + 2, 102); x.lineTo(cx + 8, 108); x.stroke();
   }
 }
 
