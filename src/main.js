@@ -26,27 +26,25 @@ let joined = false;
 let authModal = null;
 let currentMood = null;
 let currentUser = null;
-const fakePlayers = [];   // 디버그용 가짜 손님 [{id,name,yaw}]
 
 function showUI(show) { uiEls.forEach(el => el.classList.toggle('hidden', !show)); }
 
 function updateTopbar() {
   const el = document.getElementById('onlineCount');
   if (!el) return;
-  const n = (presenceManager.getTotalCount() || 1) + fakePlayers.length;
+  const n = presenceManager.getTotalCount() || 1;   // 가짜 손님도 presence라 포함됨
   el.textContent = currentMood
     ? `${currentMood.emoji} ${currentMood.name} · ${n}명 공부중`
     : `${n}명 공부중`;
 }
 
-// presence + 가짜 손님을 합쳐 월드에 반영
+// presence(가짜 손님 포함)를 월드에 반영
 function rebuildPlayers() {
   if (!currentUser) return;
-  const others = presenceManager.getOthers();
+  const others = presenceManager.getOthers();   // 가짜 손님은 별도 sid라 여기에 포함
   const players = [
     { id: currentUser.id, name: currentUser.username },
     ...others.map(o => ({ id: o.id, name: o.username, yaw: o.yaw })),
-    ...fakePlayers,
   ];
   world.setPlayers(players);
   updateTopbar();
@@ -102,7 +100,6 @@ document.getElementById('btn-logout').onclick = () => {
   joined = false;
   currentUser = null;
   currentMood = null;
-  fakePlayers.length = 0;
   showUI(false);
   world.setPlayers([]);
   authModal = new AuthModal(uiRoot);
@@ -112,13 +109,19 @@ document.getElementById('btn-logout').onclick = () => {
 new DebugPanel({
   getHour:          () => world.getHour(),
   setTimeOverride:  (h) => world.setTimeOverride(h),
+  // 가짜 손님을 실제 presence 로 등록 → 모든 클라이언트가 동일하게 봄
   addFake: () => {
-    const n = fakePlayers.length + 1;
-    fakePlayers.push({ id: `fake_${Date.now()}_${n}`, name: `손님${n}`, yaw: (Math.random() * 2 - 1) * 1.3 });
+    if (!currentUser) return;
+    presenceManager.addFakePresence(`손님${presenceManager.getFakeCount() + 1}`);
+    // presence onValue 가 곧 rebuildPlayers 를 호출하지만 즉시도 한번
     rebuildPlayers();
   },
-  removeFake: () => { fakePlayers.pop(); rebuildPlayers(); },
-  getCounts: () => ({ real: presenceManager.getTotalCount() || (currentUser ? 1 : 0), fake: fakePlayers.length }),
+  removeFake: () => { presenceManager.removeFakePresence(); rebuildPlayers(); },
+  getCounts: () => {
+    const fake = presenceManager.getFakeCount();
+    const total = presenceManager.getTotalCount() || (currentUser ? 1 : 0);
+    return { real: Math.max(0, total - fake), fake };
+  },
 });
 
 // ── 부팅 ──────────────────────────────────────────────────────

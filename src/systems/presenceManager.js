@@ -28,6 +28,7 @@ class PresenceManager {
     this._allUsers = {};     // 현재 씬의 전체 presence 스냅샷
     this._myData   = null;   // 내 presence 데이터 (position 업데이트용)
     this._scene    = null;
+    this._fakeSids = [];     // 디버그용 가짜 손님 presence 키 목록
   }
 
   // ── Firebase 초기화 ──────────────────────────────────────
@@ -158,13 +159,49 @@ class PresenceManager {
       }));
   }
 
-  /** 전체 접속자 수 (본인 포함) */
+  /** 전체 접속자 수 (본인 포함, 가짜 포함) */
   getTotalCount() {
     return Object.keys(this._allUsers).length;
   }
 
+  // ── 디버그: 가짜 손님을 실제 presence 엔트리로 등록 ──────────
+  //   → 모든 클라이언트가 동일하게 보고, 좌석/룸 카운트에도 반영됨
+  addFakePresence(name = '손님') {
+    if (!this._db || !this._scene) return null;
+    const sid  = `fake_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const fRef = ref(this._db, `presence/${this._scene}/${sid}`);
+    onDisconnect(fRef).remove();   // 이 탭이 닫히면 자동 정리
+    set(fRef, {
+      userId: sid, username: name, avatar: {}, isGuest: true, isFake: true,
+      tableId: null, seatIndex: null,
+      yaw: (Math.random() * 2 - 1) * 1.3,
+      joinedAt: serverTimestamp(),
+    });
+    this._fakeSids.push(sid);
+    return sid;
+  }
+
+  /** 마지막 가짜 손님 제거 */
+  removeFakePresence() {
+    const sid = this._fakeSids.pop();
+    if (sid && this._db && this._scene) {
+      remove(ref(this._db, `presence/${this._scene}/${sid}`));
+    }
+  }
+
+  getFakeCount() { return this._fakeSids.length; }
+
+  _clearFakes() {
+    if (this._db && this._scene) {
+      this._fakeSids.forEach(sid => remove(ref(this._db, `presence/${this._scene}/${sid}`)));
+    }
+    this._fakeSids = [];
+  }
+
   /** Presence 등록 해제 */
   leave() {
+    this._clearFakes();   // 가짜 손님 먼저 정리
+
     this._unsub?.();
     this._unsub = null;
 
