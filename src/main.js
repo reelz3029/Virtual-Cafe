@@ -12,7 +12,6 @@ import { AuthModal } from './components/AuthModal.js';
 import { ToastManager } from './components/Notifications.js';
 import { CafeWorld } from './cafeWorld.js';
 import { presenceManager } from './systems/presenceManager.js';
-import { roomAllocator } from './systems/roomAllocator.js';
 import { DebugPanel } from './debugPanel.js';
 
 const app    = document.getElementById('app');
@@ -48,7 +47,7 @@ function rebuildPlayers() {
   ];
   world.setPlayers(players);
   updateTopbar();
-  roomAllocator.reconcile(presenceManager.getTotalCount());
+  presenceManager.reconcileSlot();   // 슬롯 카운터 드리프트 보정
 }
 
 // ── 로그인 성공 → 방 배정 + presence + 고양이 동기화 ──────────
@@ -62,10 +61,10 @@ async function onLogin(user) {
   // 내 캐릭터 회전을 presence 로 전송 (다른 클라이언트에 동기화)
   world.onFacing = (yaw) => presenceManager.setFacing(yaw);
 
-  const { scene, mood } = await roomAllocator.allocate('cafe');
-  currentMood = mood;
+  // join 이 방을 원자적으로 예약하고 입장 (정원 초과 레이스 차단)
+  const res = await presenceManager.join(user, 'cafe', rebuildPlayers);
+  currentMood = res?.mood ?? null;
 
-  presenceManager.join(user, scene, rebuildPlayers);
   rebuildPlayers(); // 초기(나 혼자) 즉시 반영
 }
 
@@ -94,8 +93,7 @@ document.querySelectorAll('.vbtn[data-view]').forEach(b => {
 
 // ── 로그아웃 ──────────────────────────────────────────────────
 document.getElementById('btn-logout').onclick = () => {
-  presenceManager.leave();
-  roomAllocator.leave();
+  presenceManager.leave();   // presence 엔트리 + 예약 슬롯 + 가짜 모두 정리
   logout();
   joined = false;
   currentUser = null;

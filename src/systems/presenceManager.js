@@ -29,7 +29,8 @@ class PresenceManager {
     this._allUsers = {};     // 현재 씬의 전체 presence 스냅샷
     this._myData   = null;   // 내 presence 데이터 (position 업데이트용)
     this._scene    = null;
-    this._fakeSids = [];     // 디버그용 가짜 손님 presence 키 목록
+    this._mySlotRef = null;  // 내 방 예약 슬롯 카운터 ref
+    this._fakeSids = [];     // 디버그용 가짜 손님 [{sid, scene, slotRef}]
   }
 
   // ── Firebase 초기화 ──────────────────────────────────────
@@ -47,21 +48,22 @@ class PresenceManager {
   }
 
   /**
-   * Presence 등록
+   * Presence 등록 — base('cafe')를 받아 정원 미달 방을 원자적으로 예약 후 입장
    * @param {object} user   - 로그인 유저 (id, username, avatar, isGuest)
-   * @param {string} scene  - 현재 씬 ('cafe' | 'airport' | 'park')
+   * @param {string} base   - 베이스 씬 ('cafe')
    * @param {function} onChange - presence 변화 시 호출될 콜백
+   * @returns {Promise<{scene, mood}>}
    */
-  join(user, scene, onChange) {
-    if (!user || !scene) return;
+  async join(user, base, onChange) {
+    if (!user || !base) return null;
     this._onChange = onChange;
-    this._scene    = scene;
     // 같은 유저가 여러 탭 열어도 세션마다 별도 엔트리
     this._sid = `${user.id.replace(/[.#$/[\]]/g, '_')}_${Date.now()}`;
 
     if (!this._initDB()) {
       console.warn('[Presence] Firebase 미설정 — presence 비활성화');
-      return;
+      this._scene = `${base}__room0`;
+      return { scene: this._scene, mood: roomAllocator.moodForRoom?.('room0') ?? null };
     }
 
     this._myData = {
@@ -73,7 +75,11 @@ class PresenceManager {
       seatIndex: null,
     };
 
-    this._myRef = ref(this._db, `presence/${scene}/${this._sid}`);
+    // 원자적 방 예약 (정원 초과 레이스 차단)
+    const claim = await roomAllocator.claimRoom(base);
+    this._scene = claim.scene;
+    this._mySlotRef = claim.slotRef;
+    this._myRef = ref(this._db, `presence/${this._scene}/${this._sid}`);
 
     // Firebase 연결 상태 모니터링
     // .info/connected 는 초기화 시 항상 false를 먼저 방출하므로
@@ -109,8 +115,8 @@ class PresenceManager {
         showNotification('Firebase 쓰기 실패 — 보안 규칙을 확인하세요.', 'info');
       });
 
-    // 씬 전체 presence 구독 (모든 기기 실시간 동기화)
-    const sceneRef = ref(this._db, `presence/${scene}`);
+    // 방 전체 presence 구독 (모든 기기 실시간 동기화)
+    const sceneRef = ref(this._db, `presence/${this._scene}`);
     this._unsub = onValue(
       sceneRef,
       snap => {
@@ -126,6 +132,8 @@ class PresenceManager {
     const cleanup = () => this.leave();
     window.addEventListener('pagehide',     cleanup, { once: true });
     window.addEventListener('beforeunload', cleanup, { once: true });
+
+    return { scene: this._scene, mood: claim.mood };
   }
 
   /** 내 테이블/좌석 위치 업데이트 */
@@ -165,14 +173,22 @@ class PresenceManager {
     return Object.keys(this._allUsers).length;
   }
 
+  /** 내 예약 슬롯 드리프트 보정 (onChange 콜백에서 호출) — 5초 쓰로틀 */
+  reconcileSlot() {
+    const now = Date.now();
+    if (now - (this._lastReconcile || 0) < 5000) return;
+    this._lastReconcile = now;
+    roomAllocator.reconcileSlot(this._mySlotRef, this.getTotalCount());
+  }
+
   // ── 디버그: 가짜 손님을 실제 presence 엔트리로 등록 ──────────
-  //   방 정원에 맞춰 배정(꽉 차면 다음 방) → 룸 샤딩까지 테스트 가능
+  //   claimRoom 으로 슬롯을 원자 예약(꽉 차면 다음 방) → 룸 샤딩까지 테스트
   async addFakePresence(name = '손님') {
     if (!this._db || !this._scene) return null;
     const base  = this._scene.split('__')[0];                 // 'cafe'
-    const scene = await roomAllocator.pickRoomScene(base);    // 정원 미달 방
+    const claim = await roomAllocator.claimRoom(base);        // 슬롯 원자 예약
     const sid   = `fake_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const fRef  = ref(this._db, `presence/${scene}/${sid}`);
+    const fRef  = ref(this._db, `presence/${claim.scene}/${sid}`);
     onDisconnect(fRef).remove();   // 이 탭이 닫히면 자동 정리
     set(fRef, {
       userId: sid, username: name, avatar: {}, isGuest: true, isFake: true,
@@ -180,21 +196,27 @@ class PresenceManager {
       yaw: (Math.random() * 2 - 1) * 1.3,
       joinedAt: serverTimestamp(),
     });
-    this._fakeSids.push({ sid, scene });
+    this._fakeSids.push({ sid, scene: claim.scene, slotRef: claim.slotRef });
     return sid;
   }
 
-  /** 마지막 가짜 손님 제거 */
+  /** 마지막 가짜 손님 제거 (엔트리 삭제 + 슬롯 반납) */
   removeFakePresence() {
     const f = this._fakeSids.pop();
-    if (f && this._db) remove(ref(this._db, `presence/${f.scene}/${f.sid}`));
+    if (f && this._db) {
+      remove(ref(this._db, `presence/${f.scene}/${f.sid}`));
+      roomAllocator.releaseSlot(f.slotRef);
+    }
   }
 
   getFakeCount() { return this._fakeSids.length; }
 
   _clearFakes() {
     if (this._db) {
-      this._fakeSids.forEach(f => remove(ref(this._db, `presence/${f.scene}/${f.sid}`)));
+      this._fakeSids.forEach(f => {
+        remove(ref(this._db, `presence/${f.scene}/${f.sid}`));
+        roomAllocator.releaseSlot(f.slotRef);
+      });
     }
     this._fakeSids = [];
   }
@@ -210,6 +232,9 @@ class PresenceManager {
       remove(this._myRef);
       this._myRef = null;
     }
+    // 내 예약 슬롯 반납
+    roomAllocator.releaseSlot(this._mySlotRef);
+    this._mySlotRef = null;
 
     this._allUsers = {};
     this._myData   = null;

@@ -19,7 +19,7 @@
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
-  getDatabase, ref, onValue, get,
+  getDatabase, ref, onValue, runTransaction,
 } from 'firebase/database';
 import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebaseConfig.js';
 
@@ -74,51 +74,59 @@ class RoomAllocator {
   }
 
   /**
-   * 입장할 방을 결정하고 카운터를 +1 한다.
-   * @param {string} base  - 'cafe'
-   * @returns {Promise<{ roomId, scene, mood }>}
+   * 입장할 방을 "원자적으로" 예약한다. (정원 초과 레이스 차단)
+   *   /roomCounts/{base}/{roomId} 를 트랜잭션으로 "정원 미달일 때만 +1".
+   *   실패(만석)하면 다음 방으로 — 동시 입장에도 절대 정원을 넘지 않음.
+   * @returns {Promise<{ scene, roomId, mood, slotRef }>}
    */
-  async allocate(base) {
+  async claimRoom(base) {
     this._base = base;
-
-    // Firebase 미설정: 단일 방으로 폴백
     if (!this._initDB()) {
-      this._roomId = 'room0';
-      return { roomId: 'room0', scene: sceneKey(base, 'room0'), mood: moodForRoom('room0') };
+      return { scene: sceneKey(base, 'room0'), roomId: 'room0', mood: moodForRoom('room0'), slotRef: null };
     }
-
-    // 실제 presence 인원으로 "채우기 우선" 방 선택 (수동 카운터 미사용 → 드리프트 없음)
-    const chosen = await this._pickRoom(base);
-    this._roomId = chosen;
-    return { roomId: chosen, scene: sceneKey(base, chosen), mood: moodForRoom(chosen) };
-  }
-
-  /** 같은 base 에서 정원 미달인 가장 앞 방의 scene 키 (가짜 손님 배정 등에 재사용) */
-  async pickRoomScene(base) {
-    if (!this._initDB()) return sceneKey(base, 'room0');
-    return sceneKey(base, await this._pickRoom(base));
-  }
-
-  /** 정원 미달인 가장 앞 방 id (room0→room1→…) — 실제 presence 수 기준 */
-  async _pickRoom(base) {
     const { capacity, maxRooms } = ROOM_CONFIG;
+
     for (let i = 0; i < maxRooms; i++) {
       const rid = `room${i}`;
-      const n = await this._roomOccupancy(sceneKey(base, rid));
-      this._counts[rid] = n;
-      if (n < capacity) return rid;
+      const slotRef = ref(this._db, `roomCounts/${base}/${rid}`);
+      let committed = false;
+      try {
+        const res = await runTransaction(slotRef, (n) => {
+          n = n || 0;
+          if (n >= capacity) return;   // 만석 → abort (undefined)
+          return n + 1;                // 슬롯 원자 예약
+        });
+        committed = res.committed;
+      } catch (e) {
+        console.warn('[RoomAllocator] 슬롯 트랜잭션 실패:', e?.message);
+        committed = false;
+      }
+      if (committed) {
+        return { scene: sceneKey(base, rid), roomId: rid, mood: moodForRoom(rid), slotRef };
+      }
     }
-    return `room${maxRooms - 1}`;   // 전부 만석 → 마지막 방 오버플로
+
+    // 전부 만석 → 마지막 방 오버플로 허용(그래도 +1 추적)
+    const rid = `room${maxRooms - 1}`;
+    const slotRef = ref(this._db, `roomCounts/${base}/${rid}`);
+    await runTransaction(slotRef, (n) => (n || 0) + 1).catch(() => {});
+    return { scene: sceneKey(base, rid), roomId: rid, mood: moodForRoom(rid), slotRef };
   }
 
-  /** 특정 방(scene)의 실제 presence 인원 */
-  async _roomOccupancy(scene) {
-    try {
-      const snap = await get(ref(this._db, `presence/${scene}`));
-      return snap.exists() ? (snap.size || 0) : 0;
-    } catch {
-      return 0;
-    }
+  /** 예약 슬롯 반납 (정상 퇴장/가짜 제거) */
+  async releaseSlot(slotRef) {
+    if (!slotRef) return;
+    try { await runTransaction(slotRef, (n) => Math.max(0, (n || 0) - 1)); } catch {}
+  }
+
+  /** 드리프트 보정 — 주어진 슬롯 카운터를 실제 인원으로 끌어내림(고스트 제거) */
+  reconcileSlot(slotRef, realCount) {
+    if (!slotRef || typeof realCount !== 'number') return;
+    runTransaction(slotRef, (n) => {
+      const c = n || 0;
+      if (c - realCount >= 2) return realCount;  // 2 이상 벌어지면 실제값으로
+      return;   // 변경 없음 → abort (쓰기 발생 안 함)
+    }).catch(() => {});
   }
 
   /**
@@ -135,14 +143,10 @@ class RoomAllocator {
     return () => { this._countsUnsub?.(); this._countsUnsub = null; };
   }
 
-  /** (구) 카운터 보정 — 이제 실제 presence 인원으로 직접 배정하므로 불필요(no-op) */
-  reconcile() { /* presence 직접 카운트 방식이라 보정 불필요 */ }
-
-  /** 퇴장 — presence 는 presenceManager 가 정리, 여기선 상태만 초기화 */
+  /** 구독 정리 (선택) */
   leave() {
     this._countsUnsub?.();
     this._countsUnsub = null;
-    this._roomId = null;
   }
 
   get currentRoomId() { return this._roomId; }
