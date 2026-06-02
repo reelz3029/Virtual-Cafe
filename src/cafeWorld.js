@@ -57,15 +57,25 @@ function lerpAngle(a, b, t) {
 const SKY_KEYS = [
   { h: 0,    sun: 0x3A4A6A, sunI: 0.12, amb: 0x2A3550, ambI: 0.30, bg: 0x141C2E, win: 0x2A3A5A },
   { h: 5,    sun: 0x5A5A7A, sunI: 0.28, amb: 0x3A4060, ambI: 0.42, bg: 0x24283E, win: 0x4A4A6A },
-  { h: 6.5,  sun: 0xFFA866, sunI: 1.25, amb: 0xFFCFA8, ambI: 0.62, bg: 0x5A4A52, win: 0xFFB07A },
-  { h: 9,    sun: 0xFFE3B0, sunI: 1.90, amb: 0xFFF0DC, ambI: 0.82, bg: 0xBFA988, win: 0xFFE6C0 },
-  { h: 13,   sun: 0xFFF4E0, sunI: 2.05, amb: 0xFFF6EC, ambI: 0.92, bg: 0xCFC2A4, win: 0xFFF4E6 },
-  { h: 17,   sun: 0xFFC078, sunI: 1.75, amb: 0xFFE2C2, ambI: 0.76, bg: 0xB89878, win: 0xFFD89A },
-  { h: 18.5, sun: 0xFF9D4D, sunI: 2.40, amb: 0xFFE0B0, ambI: 0.66, bg: 0x3A2418, win: 0xFFCB85 },
-  { h: 20,   sun: 0x9A6A6A, sunI: 0.60, amb: 0x6A5A6A, ambI: 0.46, bg: 0x2A2438, win: 0x8A5A6A },
+  { h: 6.5,  sun: 0xFFB070, sunI: 1.10, amb: 0xFFD0B0, ambI: 0.60, bg: 0x6A5A55, win: 0xFFC090 },
+  { h: 9,    sun: 0xFFE8C8, sunI: 1.85, amb: 0xFFF2E0, ambI: 0.82, bg: 0xC4B090, win: 0xFFEAD0 },
+  { h: 13,   sun: 0xFFF6E8, sunI: 2.05, amb: 0xFFF8F0, ambI: 0.92, bg: 0xD0C4A8, win: 0xFFF6EA },
+  { h: 17,   sun: 0xFFEFD0, sunI: 1.95, amb: 0xFFF0E0, ambI: 0.86, bg: 0xC8B89A, win: 0xFFEAD2 }, // 아직 환한 낮
+  { h: 18.7, sun: 0xFFC982, sunI: 1.85, amb: 0xFFE2C2, ambI: 0.74, bg: 0xA88868, win: 0xFFD49A }, // 골든아워 시작
+  { h: 19.6, sun: 0xFF9D4D, sunI: 2.30, amb: 0xFFD8A8, ambI: 0.60, bg: 0x4A3020, win: 0xFFB877 }, // 노을 피크
+  { h: 20.6, sun: 0x9A6A66, sunI: 0.65, amb: 0x7A6660, ambI: 0.48, bg: 0x2A2434, win: 0x8A5A60 }, // 땅거미
   { h: 22,   sun: 0x4A5A7A, sunI: 0.22, amb: 0x3A4058, ambI: 0.34, bg: 0x1A2236, win: 0x3A4A6A },
   { h: 24,   sun: 0x3A4A6A, sunI: 0.12, amb: 0x2A3550, ambI: 0.30, bg: 0x141C2E, win: 0x2A3A5A },
 ];
+
+// 야간 실내조명 점등 정도 (0 낮 → 1 밤): 19.5시 켜지기 시작 21시 최대, 아침 7시 꺼짐
+function nightFactor(hour) {
+  const h = ((hour % 24) + 24) % 24;
+  if (h >= 21 || h < 6) return 1;
+  if (h >= 19.5) return (h - 19.5) / 1.5;
+  if (h < 7) return (7 - h) / 1;
+  return 0;
+}
 
 // 재사용 컬러(할당 최소화)
 const _tSun = new THREE.Color(), _tAmb = new THREE.Color(), _tBg = new THREE.Color(), _tWin = new THREE.Color();
@@ -191,15 +201,27 @@ export class CafeWorld {
     this.sun.shadow.bias = -0.0004;
     this.scene.add(this.sun);
 
-    const warmFill = new THREE.PointLight(0xFFB860, 1.3, 30);
+    // 낮 따뜻한 채움 + 반대편 쿨 바운스 (상시, 약하게)
+    const warmFill = new THREE.PointLight(0xFFB860, 0.7, 30);
     warmFill.position.set(3, 6, 2);
     this.scene.add(warmFill);
-    const coolFill = new THREE.DirectionalLight(0x8FA8C8, 0.3);
+    const coolFill = new THREE.DirectionalLight(0x8FA8C8, 0.28);
     coolFill.position.set(10, 6, -6);
     this.scene.add(coolFill);
-    const bulb = new THREE.PointLight(0xFFCB7A, 0.9, 12);
-    bulb.position.set(-1, 4.6, 0);
-    this.scene.add(bulb);
+
+    // 야간 실내조명 (형광/펜던트) — nightFactor 로 점등 (낮엔 0)
+    this._interior = [];
+    const addInterior = (light, base) => {
+      light.intensity = 0; this.scene.add(light);
+      this._interior.push({ light, base });
+    };
+    const mkP = (color, dist, x, y, z) => {
+      const l = new THREE.PointLight(color, 1, dist); l.position.set(x, y, z); return l;
+    };
+    addInterior(mkP(0xFFD9A0, 14, -1, 4.4, 0), 1.5);    // 펜던트1
+    addInterior(mkP(0xFFD9A0, 14, 2.5, 4.4, 2), 1.5);   // 펜던트2
+    addInterior(mkP(0xFFE2B0, 13, 4.5, 3.0, -4), 1.1);  // 카운터
+    addInterior(mkP(0xFFF2DC, 36, 0, 7.6, 0), 1.0);     // 천장 형광 필
 
     // 조명은 시간대(_applyTimeLighting)에서 매 프레임 갱신
   }
@@ -726,16 +748,22 @@ export class CafeWorld {
     this.renderer.setClearColor(this.scene.fog.color);
     this.windowGlow.material.color.lerp(tgt.win, k);
 
-    // 태양 위치: 동(아침,+x) → 천정(정오) → 서(저녁,-x·창측) 아치
-    const dt = clamp((hour - 6) / 12, 0, 1);     // 06~18시 → 0~1
+    // 태양 위치: 동(아침,+x) → 천정(정오) → 서(저녁,-x·창측) 아치 (06~20시)
+    const dt = clamp((hour - 6) / 14, 0, 1);      // 06~20시 → 0~1 (해 늦게 짐)
     const sx = Math.cos(Math.PI * dt) * 14;       // +14(동) → -14(서·창)
     const sy = 2.5 + Math.sin(Math.PI * dt) * 12; // 낮·해질녘 낮게, 정오 높게
     this.sun.position.set(sx, sy, 8);
 
+    // 야간 실내조명 점등 (밤일수록 밝게, 부드럽게 페이드)
+    const nf = nightFactor(hour);
+    this._interior?.forEach(it => {
+      it.light.intensity += (it.base * nf - it.light.intensity) * 0.08;
+    });
+
     // 시계 라벨
     const hh = Math.floor(hour) % 24;
     const mm = Math.floor((hour - Math.floor(hour)) * 60);
-    const phase = (hour < 6 || hour >= 20) ? '🌙' : (hour < 9 ? '🌅' : (hour < 17 ? '☀' : '🌇'));
+    const phase = (hour < 6 || hour >= 20.5) ? '🌙' : (hour < 9 ? '🌅' : (hour < 18.5 ? '☀' : '🌇'));
     const tl = document.getElementById('timeLabel');
     if (tl) tl.textContent = `${phase}  ${pad2(hh)}:${pad2(mm)}${this._timeOverride != null ? '  (디버그)' : ''}`;
   }
