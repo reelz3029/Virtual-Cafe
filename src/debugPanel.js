@@ -122,7 +122,7 @@ export class DebugPanel {
     this._timeVal.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     if (this._realtime.checked) this._slider.value = h.toFixed(1);
     const c = this._getCounts?.() ?? { real: 0, fake: 0 };
-    this._counts.textContent = `접속 ${c.real} · 가짜 ${c.fake}`;
+    this._counts.textContent = `내 방 ${c.real}명 · 생성한 가짜 ${c.fake}`;
   }
 
   dispose() {

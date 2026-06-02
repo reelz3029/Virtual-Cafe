@@ -109,19 +109,17 @@ document.getElementById('btn-logout').onclick = () => {
 new DebugPanel({
   getHour:          () => world.getHour(),
   setTimeOverride:  (h) => world.setTimeOverride(h),
-  // 가짜 손님을 실제 presence 로 등록 → 모든 클라이언트가 동일하게 봄
+  // 가짜 손님을 실제 presence 로 등록(방 정원 따라 배정) → 모든 클라이언트가 봄
   addFake: () => {
     if (!currentUser) return;
     presenceManager.addFakePresence(`손님${presenceManager.getFakeCount() + 1}`);
-    // presence onValue 가 곧 rebuildPlayers 를 호출하지만 즉시도 한번
-    rebuildPlayers();
+    // 내 방 추가분은 presence onValue 가 rebuildPlayers 를 호출함(다른 방이면 내 화면 무변)
   },
-  removeFake: () => { presenceManager.removeFakePresence(); rebuildPlayers(); },
-  getCounts: () => {
-    const fake = presenceManager.getFakeCount();
-    const total = presenceManager.getTotalCount() || (currentUser ? 1 : 0);
-    return { real: Math.max(0, total - fake), fake };
-  },
+  removeFake: () => { presenceManager.removeFakePresence(); },
+  getCounts: () => ({
+    real: presenceManager.getTotalCount() || (currentUser ? 1 : 0),  // 내 방 인원
+    fake: presenceManager.getFakeCount(),
+  }),
 });
 
 // ── 부팅 ──────────────────────────────────────────────────────

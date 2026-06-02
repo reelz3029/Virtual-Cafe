@@ -19,7 +19,7 @@
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
-  getDatabase, ref, onValue, runTransaction, get,
+  getDatabase, ref, onValue, get,
 } from 'firebase/database';
 import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebaseConfig.js';
 
@@ -87,60 +87,38 @@ class RoomAllocator {
       return { roomId: 'room0', scene: sceneKey(base, 'room0'), mood: moodForRoom('room0') };
     }
 
-    // 1. 현재 방별 카운트 스냅샷 읽기
-    //    roomCounts 보안 규칙이 없거나 네트워크 오류면 permission-denied 등으로
-    //    throw → 단일 방(room0)으로 폴백해 입장 자체는 깨지지 않게 한다.
-    try {
-      const snap = await get(ref(this._db, `roomCounts/${base}`));
-      this._counts = snap.val() || {};
-    } catch (e) {
-      console.warn('[RoomAllocator] roomCounts 읽기 실패 — 단일 방 폴백:', e?.message);
-      this._roomId = 'room0';
-      return { roomId: 'room0', scene: sceneKey(base, 'room0'), mood: moodForRoom('room0') };
-    }
-
-    // 2. "채우기 우선" — 안 꽉 찬 방 중 가장 많이 찬 방
-    const chosen = this._pickRoom();
-
-    // 3. 카운터 +1 (transaction 으로 경쟁 방지) — 실패해도 입장은 진행
+    // 실제 presence 인원으로 "채우기 우선" 방 선택 (수동 카운터 미사용 → 드리프트 없음)
+    const chosen = await this._pickRoom(base);
     this._roomId = chosen;
-    this._myCountRef = ref(this._db, `roomCounts/${base}/${chosen}`);
-    try {
-      await runTransaction(this._myCountRef, cur => (cur || 0) + 1);
-    } catch (e) {
-      console.warn('[RoomAllocator] 카운터 +1 실패 (무시):', e?.message);
-      this._myCountRef = null;
-    }
-
-    // 4. 비정상 종료 보정: onDisconnect 트랜잭션이 불가하므로 호출하지 않는다.
-    //    (set(undefined)/null ref 는 동기 예외 → allocate 가 죽어 presence 등록까지
-    //     막혔던 버그.) 카운터 드리프트는 _syncUsers 의 reconcile() 셀프 힐링으로 수렴.
-
-    return {
-      roomId: chosen,
-      scene: sceneKey(base, chosen),
-      mood: moodForRoom(chosen),
-    };
+    return { roomId: chosen, scene: sceneKey(base, chosen), mood: moodForRoom(chosen) };
   }
 
-  /** 안 꽉 찬 방 중 가장 많이 찬 방 선택, 없으면 새 방 */
-  _pickRoom() {
+  /** 같은 base 에서 정원 미달인 가장 앞 방의 scene 키 (가짜 손님 배정 등에 재사용) */
+  async pickRoomScene(base) {
+    if (!this._initDB()) return sceneKey(base, 'room0');
+    return sceneKey(base, await this._pickRoom(base));
+  }
+
+  /** 정원 미달인 가장 앞 방 id (room0→room1→…) — 실제 presence 수 기준 */
+  async _pickRoom(base) {
     const { capacity, maxRooms } = ROOM_CONFIG;
-    const candidates = [];
     for (let i = 0; i < maxRooms; i++) {
       const rid = `room${i}`;
-      const n = this._counts[rid] || 0;
-      if (n < capacity) candidates.push({ rid, n });
+      const n = await this._roomOccupancy(sceneKey(base, rid));
+      this._counts[rid] = n;
+      if (n < capacity) return rid;
     }
-    if (!candidates.length) {
-      // 전부 만석 — 마지막 방에 오버플로 (정원 약간 초과 허용)
-      return `room${maxRooms - 1}`;
+    return `room${maxRooms - 1}`;   // 전부 만석 → 마지막 방 오버플로
+  }
+
+  /** 특정 방(scene)의 실제 presence 인원 */
+  async _roomOccupancy(scene) {
+    try {
+      const snap = await get(ref(this._db, `presence/${scene}`));
+      return snap.exists() ? (snap.size || 0) : 0;
+    } catch {
+      return 0;
     }
-    // 가장 많이 찬(=n이 큰) 방부터. 단 0인 방이 여러 개면 가장 앞 방.
-    candidates.sort((a, b) => b.n - a.n);
-    // 모든 후보가 0명이면 room0 (가장 앞)
-    if (candidates.every(c => c.n === 0)) return 'room0';
-    return candidates[0].rid;
   }
 
   /**
@@ -157,34 +135,11 @@ class RoomAllocator {
     return () => { this._countsUnsub?.(); this._countsUnsub = null; };
   }
 
-  /**
-   * 셀프 힐링 — 내 방의 실제 presence 인원으로 카운터를 보정한다.
-   * presenceManager 의 onValue 콜백(모든 기기에서 호출됨)에서 주기적으로 부르면,
-   * onDisconnect 트랜잭션 한계로 생기는 고스트 +1 드리프트가 자연히 수렴한다.
-   *
-   * @param {number} realCount - presenceManager.getTotalCount() 결과
-   */
-  reconcile(realCount) {
-    if (!this._db || !this._base || !this._roomId) return;
-    if (typeof realCount !== 'number') return;
+  /** (구) 카운터 보정 — 이제 실제 presence 인원으로 직접 배정하므로 불필요(no-op) */
+  reconcile() { /* presence 직접 카운트 방식이라 보정 불필요 */ }
 
-    const ref_ = ref(this._db, `roomCounts/${this._base}/${this._roomId}`);
-    // 카운터가 실제보다 크게 벌어졌을 때만 보정 (쓰기 경쟁 최소화)
-    // 규칙 미설정 등으로 거부돼도 조용히 무시 (입장/착석에는 영향 없음)
-    runTransaction(ref_, cur => {
-      const c = cur || 0;
-      if (Math.abs(c - realCount) >= 2) return realCount;
-      return cur;
-    }).catch(() => {});
-  }
-
-  /** 퇴장 — 카운터 -1 */
-  async leave() {
-    if (this._myCountRef) {
-      const r = this._myCountRef;
-      this._myCountRef = null;
-      try { await runTransaction(r, cur => Math.max(0, (cur || 0) - 1)); } catch {}
-    }
+  /** 퇴장 — presence 는 presenceManager 가 정리, 여기선 상태만 초기화 */
+  leave() {
     this._countsUnsub?.();
     this._countsUnsub = null;
     this._roomId = null;

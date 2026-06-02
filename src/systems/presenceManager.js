@@ -17,6 +17,7 @@ import {
 } from 'firebase/database';
 import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebaseConfig.js';
 import { showNotification } from '../store/gameStore.js';
+import { roomAllocator } from './roomAllocator.js';
 
 class PresenceManager {
   constructor() {
@@ -165,11 +166,13 @@ class PresenceManager {
   }
 
   // ── 디버그: 가짜 손님을 실제 presence 엔트리로 등록 ──────────
-  //   → 모든 클라이언트가 동일하게 보고, 좌석/룸 카운트에도 반영됨
-  addFakePresence(name = '손님') {
+  //   방 정원에 맞춰 배정(꽉 차면 다음 방) → 룸 샤딩까지 테스트 가능
+  async addFakePresence(name = '손님') {
     if (!this._db || !this._scene) return null;
-    const sid  = `fake_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const fRef = ref(this._db, `presence/${this._scene}/${sid}`);
+    const base  = this._scene.split('__')[0];                 // 'cafe'
+    const scene = await roomAllocator.pickRoomScene(base);    // 정원 미달 방
+    const sid   = `fake_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const fRef  = ref(this._db, `presence/${scene}/${sid}`);
     onDisconnect(fRef).remove();   // 이 탭이 닫히면 자동 정리
     set(fRef, {
       userId: sid, username: name, avatar: {}, isGuest: true, isFake: true,
@@ -177,23 +180,21 @@ class PresenceManager {
       yaw: (Math.random() * 2 - 1) * 1.3,
       joinedAt: serverTimestamp(),
     });
-    this._fakeSids.push(sid);
+    this._fakeSids.push({ sid, scene });
     return sid;
   }
 
   /** 마지막 가짜 손님 제거 */
   removeFakePresence() {
-    const sid = this._fakeSids.pop();
-    if (sid && this._db && this._scene) {
-      remove(ref(this._db, `presence/${this._scene}/${sid}`));
-    }
+    const f = this._fakeSids.pop();
+    if (f && this._db) remove(ref(this._db, `presence/${f.scene}/${f.sid}`));
   }
 
   getFakeCount() { return this._fakeSids.length; }
 
   _clearFakes() {
-    if (this._db && this._scene) {
-      this._fakeSids.forEach(sid => remove(ref(this._db, `presence/${this._scene}/${sid}`)));
+    if (this._db) {
+      this._fakeSids.forEach(f => remove(ref(this._db, `presence/${f.scene}/${f.sid}`)));
     }
     this._fakeSids = [];
   }
