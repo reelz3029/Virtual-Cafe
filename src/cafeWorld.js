@@ -53,6 +53,50 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 
+// ── 하루 시간대별 조명 키프레임 (시각 → 태양/앰비언트/배경/창) ──
+const SKY_KEYS = [
+  { h: 0,    sun: 0x3A4A6A, sunI: 0.12, amb: 0x2A3550, ambI: 0.30, bg: 0x141C2E, win: 0x2A3A5A },
+  { h: 5,    sun: 0x5A5A7A, sunI: 0.28, amb: 0x3A4060, ambI: 0.42, bg: 0x24283E, win: 0x4A4A6A },
+  { h: 6.5,  sun: 0xFFA866, sunI: 1.25, amb: 0xFFCFA8, ambI: 0.62, bg: 0x5A4A52, win: 0xFFB07A },
+  { h: 9,    sun: 0xFFE3B0, sunI: 1.90, amb: 0xFFF0DC, ambI: 0.82, bg: 0xBFA988, win: 0xFFE6C0 },
+  { h: 13,   sun: 0xFFF4E0, sunI: 2.05, amb: 0xFFF6EC, ambI: 0.92, bg: 0xCFC2A4, win: 0xFFF4E6 },
+  { h: 17,   sun: 0xFFC078, sunI: 1.75, amb: 0xFFE2C2, ambI: 0.76, bg: 0xB89878, win: 0xFFD89A },
+  { h: 18.5, sun: 0xFF9D4D, sunI: 2.40, amb: 0xFFE0B0, ambI: 0.66, bg: 0x3A2418, win: 0xFFCB85 },
+  { h: 20,   sun: 0x9A6A6A, sunI: 0.60, amb: 0x6A5A6A, ambI: 0.46, bg: 0x2A2438, win: 0x8A5A6A },
+  { h: 22,   sun: 0x4A5A7A, sunI: 0.22, amb: 0x3A4058, ambI: 0.34, bg: 0x1A2236, win: 0x3A4A6A },
+  { h: 24,   sun: 0x3A4A6A, sunI: 0.12, amb: 0x2A3550, ambI: 0.30, bg: 0x141C2E, win: 0x2A3A5A },
+];
+
+// 재사용 컬러(할당 최소화)
+const _tSun = new THREE.Color(), _tAmb = new THREE.Color(), _tBg = new THREE.Color(), _tWin = new THREE.Color();
+
+// 시각(0~24, 소수) → 보간된 조명 프리셋
+function lightingForHour(hour) {
+  const h = ((hour % 24) + 24) % 24;
+  let k0 = SKY_KEYS[0], k1 = SKY_KEYS[SKY_KEYS.length - 1];
+  for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+    if (h >= SKY_KEYS[i].h && h < SKY_KEYS[i + 1].h) { k0 = SKY_KEYS[i]; k1 = SKY_KEYS[i + 1]; break; }
+  }
+  const t = clamp((h - k0.h) / (k1.h - k0.h || 1), 0, 1);
+  _tSun.set(k0.sun).lerp(_c1.set(k1.sun), t);
+  _tAmb.set(k0.amb).lerp(_c1.set(k1.amb), t);
+  _tBg.set(k0.bg).lerp(_c1.set(k1.bg), t);
+  _tWin.set(k0.win).lerp(_c1.set(k1.win), t);
+  return {
+    sun: _tSun, amb: _tAmb, bg: _tBg, win: _tWin,
+    sunI: k0.sunI + (k1.sunI - k0.sunI) * t,
+    ambI: k0.ambI + (k1.ambI - k0.ambI) * t,
+  };
+}
+const _c1 = new THREE.Color();
+
+// 현재 로컬 시각(소수 시간)
+function realHour() {
+  const d = new Date();
+  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+
 const mat = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
 
 function hashStr(s) {
@@ -68,8 +112,8 @@ export class CafeWorld {
     this._myTableIdx = 0;
     this._catGroup = new THREE.Group();
     this._cats = [];           // { obj, baseY, phase }
-    this._isSunset = true;
-    this._sunsetMix = 1;
+    this._timeOverride = null;  // null = 실시간, 숫자 = 디버그 강제 시각(0~24)
+    this._currentHour = 12;
     this._catBase = null;      // 정규화된 GLB 원본(클론용)
     this._pendingPlayers = null; // 모델 로드 전 들어온 setPlayers 보류분
 
@@ -157,9 +201,7 @@ export class CafeWorld {
     bulb.position.set(-1, 4.6, 0);
     this.scene.add(bulb);
 
-    // 황혼/주간 보간용 색
-    this.SUN_SUNSET = { col: new THREE.Color(0xFF9D4D), int: 2.4, amb: new THREE.Color(0xFFE0B0), ambI: 0.68, bg: new THREE.Color(0x3a2418), win: new THREE.Color(0xFFCB85) };
-    this.SUN_DAY    = { col: new THREE.Color(0xFFF0D8), int: 1.7, amb: new THREE.Color(0xFFF4E2), ambI: 0.85, bg: new THREE.Color(0xBFA988), win: new THREE.Color(0xEAF2FF) };
+    // 조명은 시간대(_applyTimeLighting)에서 매 프레임 갱신
   }
 
   // ── 공간 (바닥/벽/보/창/책장/카운터/펜던트/먼지) ──────────
@@ -548,7 +590,9 @@ export class CafeWorld {
     }
   }
 
-  toggleSunset() { this._isSunset = !this._isSunset; return this._isSunset; }
+  // 디버그: 시각 강제(0~24) / null = 실시간 동기화
+  setTimeOverride(hour) { this._timeOverride = (hour == null ? null : clamp(hour, 0, 24)); }
+  getHour() { return this._currentHour; }
 
   // ── 1인칭 입력 (마우스 드래그 + 방향키로 좌우·상하 둘러보기) ──
   _bindInput() {
@@ -662,21 +706,38 @@ export class CafeWorld {
     for (let i = 0; i < dp.length; i += 3) { dp[i + 1] += 0.004; if (dp[i + 1] > 8) dp[i + 1] = 0; }
     this._dust.geometry.attributes.position.needsUpdate = true;
 
-    // 황혼 ↔ 주간 보간
-    const target = this._isSunset ? 1 : 0;
-    this._sunsetMix += (target - this._sunsetMix) * 0.04;
-    const m = this._sunsetMix, D = this.SUN_DAY, S = this.SUN_SUNSET;
-    this.sun.color.lerpColors(D.col, S.col, m);
-    this.sun.intensity = D.int + (S.int - D.int) * m;
-    this.ambient.color.lerpColors(D.amb, S.amb, m);
-    this.ambient.intensity = D.ambI + (S.ambI - D.ambI) * m;
-    this.scene.fog.color.lerpColors(D.bg, S.bg, m);
-    this.renderer.setClearColor(this.scene.fog.color);
-    this.windowGlow.material.color.lerpColors(D.win, S.win, m);
-    const tl = document.getElementById('timeLabel');
-    if (tl) tl.textContent = m > 0.5 ? '☀ 해질녘 5:47 PM ☀' : '☀ 한낮 2:14 PM ☀';
+    // 실시간(또는 디버그 강제) 시각에 따른 조명
+    this._applyTimeLighting();
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // 시간대 조명 — 실시간(또는 디버그 강제 시각)에 따라 태양/배경/창 갱신
+  _applyTimeLighting() {
+    const hour = (this._timeOverride != null) ? this._timeOverride : realHour();
+    this._currentHour = hour;
+    const tgt = lightingForHour(hour);
+    const k = 0.06;   // 부드러운 추종 (디버그 스크럽도 자연스럽게)
+    this.sun.color.lerp(tgt.sun, k);
+    this.sun.intensity += (tgt.sunI - this.sun.intensity) * k;
+    this.ambient.color.lerp(tgt.amb, k);
+    this.ambient.intensity += (tgt.ambI - this.ambient.intensity) * k;
+    this.scene.fog.color.lerp(tgt.bg, k);
+    this.renderer.setClearColor(this.scene.fog.color);
+    this.windowGlow.material.color.lerp(tgt.win, k);
+
+    // 태양 위치: 동(아침,+x) → 천정(정오) → 서(저녁,-x·창측) 아치
+    const dt = clamp((hour - 6) / 12, 0, 1);     // 06~18시 → 0~1
+    const sx = Math.cos(Math.PI * dt) * 14;       // +14(동) → -14(서·창)
+    const sy = 2.5 + Math.sin(Math.PI * dt) * 12; // 낮·해질녘 낮게, 정오 높게
+    this.sun.position.set(sx, sy, 8);
+
+    // 시계 라벨
+    const hh = Math.floor(hour) % 24;
+    const mm = Math.floor((hour - Math.floor(hour)) * 60);
+    const phase = (hour < 6 || hour >= 20) ? '🌙' : (hour < 9 ? '🌅' : (hour < 17 ? '☀' : '🌇'));
+    const tl = document.getElementById('timeLabel');
+    if (tl) tl.textContent = `${phase}  ${pad2(hh)}:${pad2(mm)}${this._timeOverride != null ? '  (디버그)' : ''}`;
   }
 
   _resize() {

@@ -13,6 +13,7 @@ import { ToastManager } from './components/Notifications.js';
 import { CafeWorld } from './cafeWorld.js';
 import { presenceManager } from './systems/presenceManager.js';
 import { roomAllocator } from './systems/roomAllocator.js';
+import { DebugPanel } from './debugPanel.js';
 
 const app    = document.getElementById('app');
 const uiRoot = document.getElementById('ui-root');
@@ -24,22 +25,39 @@ const world = new CafeWorld(app);
 let joined = false;
 let authModal = null;
 let currentMood = null;
+let currentUser = null;
+const fakePlayers = [];   // 디버그용 가짜 손님 [{id,name,yaw}]
 
 function showUI(show) { uiEls.forEach(el => el.classList.toggle('hidden', !show)); }
 
 function updateTopbar() {
   const el = document.getElementById('onlineCount');
   if (!el) return;
-  const n = presenceManager.getTotalCount() || 1;
+  const n = (presenceManager.getTotalCount() || 1) + fakePlayers.length;
   el.textContent = currentMood
     ? `${currentMood.emoji} ${currentMood.name} · ${n}명 공부중`
     : `${n}명 공부중`;
+}
+
+// presence + 가짜 손님을 합쳐 월드에 반영
+function rebuildPlayers() {
+  if (!currentUser) return;
+  const others = presenceManager.getOthers();
+  const players = [
+    { id: currentUser.id, name: currentUser.username },
+    ...others.map(o => ({ id: o.id, name: o.username, yaw: o.yaw })),
+    ...fakePlayers,
+  ];
+  world.setPlayers(players);
+  updateTopbar();
+  roomAllocator.reconcile(presenceManager.getTotalCount());
 }
 
 // ── 로그인 성공 → 방 배정 + presence + 고양이 동기화 ──────────
 async function onLogin(user) {
   if (joined) return;
   joined = true;
+  currentUser = user;
   authModal?.destroy(); authModal = null;
   showUI(true);
   world.setMyId(user.id);
@@ -49,36 +67,18 @@ async function onLogin(user) {
   const { scene, mood } = await roomAllocator.allocate('cafe');
   currentMood = mood;
 
-  const sync = () => {
-    const others = presenceManager.getOthers();
-    const players = [
-      { id: user.id, name: user.username },
-      ...others.map(o => ({ id: o.id, name: o.username, yaw: o.yaw })),
-    ];
-    world.setPlayers(players);
-    updateTopbar();
-    roomAllocator.reconcile(presenceManager.getTotalCount());
-  };
-
-  presenceManager.join(user, scene, sync);
-  sync(); // 초기(나 혼자) 즉시 반영
+  presenceManager.join(user, scene, rebuildPlayers);
+  rebuildPlayers(); // 초기(나 혼자) 즉시 반영
 }
 
 // 스토어에서 로그인 상태 감지
 store.subscribe(s => { if (s.auth.isLoggedIn && !joined) onLogin(s.auth.user); });
 
-// ── 시점 컨트롤 (둘러보기 / 내 자리 / 노을 토글) ──────────────
+// ── 시점 컨트롤 (둘러보기 / 내 자리 / 1인칭) ──────────────────
 document.querySelectorAll('.vbtn[data-view]').forEach(b => {
   b.onclick = () => {
     const v = b.dataset.view;
-    if (v === 'sunset') {
-      const sunset = world.toggleSunset();
-      b.classList.toggle('active', !sunset);
-      return;
-    }
-    document.querySelectorAll('.vbtn[data-view]').forEach(x => {
-      if (x.dataset.view !== 'sunset') x.classList.remove('active');
-    });
+    document.querySelectorAll('.vbtn[data-view]').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     world.setView(v);
 
@@ -100,11 +100,26 @@ document.getElementById('btn-logout').onclick = () => {
   roomAllocator.leave();
   logout();
   joined = false;
+  currentUser = null;
   currentMood = null;
+  fakePlayers.length = 0;
   showUI(false);
   world.setPlayers([]);
   authModal = new AuthModal(uiRoot);
 };
+
+// ── 개발자 디버그 패널 (시각 강제 / 가짜 손님) ────────────────
+new DebugPanel({
+  getHour:          () => world.getHour(),
+  setTimeOverride:  (h) => world.setTimeOverride(h),
+  addFake: () => {
+    const n = fakePlayers.length + 1;
+    fakePlayers.push({ id: `fake_${Date.now()}_${n}`, name: `손님${n}`, yaw: (Math.random() * 2 - 1) * 1.3 });
+    rebuildPlayers();
+  },
+  removeFake: () => { fakePlayers.pop(); rebuildPlayers(); },
+  getCounts: () => ({ real: presenceManager.getTotalCount() || (currentUser ? 1 : 0), fake: fakePlayers.length }),
+});
 
 // ── 부팅 ──────────────────────────────────────────────────────
 showUI(false);
