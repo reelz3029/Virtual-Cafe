@@ -77,7 +77,6 @@ export async function handleGoogleCredential(credential) {
       username:  name,
       email,
       avatar:    DEFAULT_CHARACTER,
-      coin:      50,
       joinedAt:  new Date().toISOString(),
       totalTime: 0,
       isGoogle:  true,
@@ -90,11 +89,10 @@ export async function handleGoogleCredential(credential) {
   saveUserToLocal(sessionUser);
   loginUser(sessionUser);
 
-  if (isNew) {
-    showNotification('🎉 첫 입장! 50코인이 지급되었어요.', 'success');
-  } else {
-    showNotification(`어서오세요, ${userData.username}님! ☕`, 'success');
-  }
+  showNotification(
+    isNew ? `🎉 첫 입장을 환영해요, ${userData.username}님!` : `어서오세요, ${userData.username}님! ☕`,
+    'success',
+  );
 
   return { ok: true, user: sessionUser };
 }
@@ -114,7 +112,6 @@ export async function loginAsGuest(nickname) {
     username:  trimmed,
     email:     null,
     avatar:    DEFAULT_CHARACTER,
-    coin:      20,
     joinedAt:  new Date().toISOString(),
     totalTime: 0,
     isGuest:   true,
@@ -130,7 +127,7 @@ export function tryAutoLogin() {
   const saved = loadUserFromLocal();
   if (!saved || saved.isGuest) return false;
 
-  // Google 유저면 저장된 최신 데이터(coin, avatar)로 업데이트
+  // Google 유저면 저장된 최신 데이터(avatar, totalTime)로 업데이트
   if (saved.isGoogle) {
     const key = saved.id.replace('google_', '');
     const googleUsers = getGoogleUsers();
@@ -151,39 +148,6 @@ export function logout() {
   clearLocalUser();
   logoutUser();
   showNotification('로그아웃되었습니다.', 'info');
-}
-
-// ── 캐릭터 저장 ───────────────────────────────────────────────
-export function saveCharacter(avatar) {
-  const { auth } = store.getState();
-  if (!auth.user) return;
-
-  const updated = { ...auth.user, avatar };
-  saveUserToLocal(updated);
-
-  if (auth.user.isGoogle) {
-    const key = auth.user.id.replace('google_', '');
-    const users = getGoogleUsers();
-    if (users[key]) {
-      users[key].avatar = avatar;
-      saveGoogleUsers(users);
-    }
-  }
-
-  return updated;
-}
-
-// ── 코인 영구 저장 ────────────────────────────────────────────
-export function persistCoins(userId, coins) {
-  if (!userId || userId.startsWith('guest_')) return;
-  if (userId.startsWith('google_')) {
-    const key = userId.replace('google_', '');
-    const users = getGoogleUsers();
-    if (users[key]) {
-      users[key].coin = coins;
-      saveGoogleUsers(users);
-    }
-  }
 }
 
 // ── 내부 유틸 ─────────────────────────────────────────────────

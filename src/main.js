@@ -37,6 +37,16 @@ function updateTopbar() {
     : `${n}명 공부중`;
 }
 
+// 이번 세션 공부 시간 — 상단바에 분 단위 표시
+function updateStudyTime() {
+  const el = document.getElementById('studyTime');
+  const { sessionStart } = store.getState();
+  if (!el || !sessionStart) return;
+  const min = Math.floor((Date.now() - sessionStart) / 60_000);
+  el.textContent = min < 60 ? `📖 ${min}분` : `📖 ${Math.floor(min / 60)}시간 ${min % 60}분`;
+}
+setInterval(updateStudyTime, 30_000);
+
 // presence(가짜 손님 포함)를 월드에 반영
 function rebuildPlayers() {
   if (!currentUser) return;
@@ -66,6 +76,7 @@ async function onLogin(user) {
   currentMood = res?.mood ?? null;
 
   rebuildPlayers(); // 초기(나 혼자) 즉시 반영
+  updateStudyTime();
 }
 
 // 스토어에서 로그인 상태 감지
@@ -104,21 +115,24 @@ document.getElementById('btn-logout').onclick = () => {
 };
 
 // ── 개발자 디버그 패널 (시각 강제 / 가짜 손님) ────────────────
-new DebugPanel({
-  getHour:          () => world.getHour(),
-  setTimeOverride:  (h) => world.setTimeOverride(h),
-  // 가짜 손님을 실제 presence 로 등록(방 정원 따라 배정) → 모든 클라이언트가 봄
-  addFake: () => {
-    if (!currentUser) return;
-    presenceManager.addFakePresence(`손님${presenceManager.getFakeCount() + 1}`);
-    // 내 방 추가분은 presence onValue 가 rebuildPlayers 를 호출함(다른 방이면 내 화면 무변)
-  },
-  removeFake: () => { presenceManager.removeFakePresence(); },
-  getCounts: () => ({
-    real: presenceManager.getTotalCount() || (currentUser ? 1 : 0),  // 내 방 인원
-    fake: presenceManager.getFakeCount(),
-  }),
-});
+// 개발 모드 전용 — 프로덕션 빌드에서는 URL 에 ?debug 를 붙여야 활성화
+if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
+  new DebugPanel({
+    getHour:          () => world.getHour(),
+    setTimeOverride:  (h) => world.setTimeOverride(h),
+    // 가짜 손님을 실제 presence 로 등록(방 정원 따라 배정) → 모든 클라이언트가 봄
+    addFake: () => {
+      if (!currentUser) return;
+      presenceManager.addFakePresence(`손님${presenceManager.getFakeCount() + 1}`);
+      // 내 방 추가분은 presence onValue 가 rebuildPlayers 를 호출함(다른 방이면 내 화면 무변)
+    },
+    removeFake: () => { presenceManager.removeFakePresence(); },
+    getCounts: () => ({
+      real: presenceManager.getTotalCount() || (currentUser ? 1 : 0),  // 내 방 인원
+      fake: presenceManager.getFakeCount(),
+    }),
+  });
+}
 
 // ── 부팅 ──────────────────────────────────────────────────────
 showUI(false);

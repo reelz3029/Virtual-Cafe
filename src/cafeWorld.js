@@ -431,8 +431,27 @@ export class CafeWorld {
       this._placeBarista();
       if (this._pendingPlayers) { this.setPlayers(this._pendingPlayers); this._pendingPlayers = null; }
     }, undefined, (err) => {
-      console.error('[CafeWorld] 캐릭터 GLB 로드 실패:', err);
+      console.error('[CafeWorld] 캐릭터 GLB 로드 실패 — 폴백 캐릭터 사용:', err);
+      this._catBase = this._makeFallbackCat();
+      this._placeBarista();
+      if (this._pendingPlayers) { this.setPlayers(this._pendingPlayers); this._pendingPlayers = null; }
     });
+  }
+
+  // GLB 로드 실패 시 폴백 — 단순 프리미티브 고양이 (좌석이 비지 않게)
+  _makeFallbackCat() {
+    const g = new THREE.Group();
+    const fur = mat(0xE8C49A);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 10), fur);
+    body.position.y = 0.38; body.scale.y = 0.9; body.castShadow = true; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), fur);
+    head.position.y = 0.92; head.castShadow = true; g.add(head);
+    [[-0.16, 0.18], [0.16, -0.18]].forEach(([dx, rot]) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 6), fur);
+      ear.position.set(dx, 1.16, 0); ear.rotation.z = rot; g.add(ear);
+    });
+    // 정규화된 GLB 와 동일하게 높이 CAT_HEIGHT 근사 (≈1.25)
+    return g;
   }
 
   // GLB 클론 인스턴스 1개 생성 (좌석 위치/방향)
@@ -509,10 +528,12 @@ export class CafeWorld {
     // 모델 로드 전이면 보류 후 로드 완료 시 반영
     if (!this._catBase) { this._pendingPlayers = players; return; }
 
-    // 모든 클라이언트가 동일한 좌석 배정을 갖도록 id 기준 전역 정렬
+    // 모든 클라이언트가 동일한 좌석 배정을 갖도록 id 기준 전역 정렬 후 정원만큼
+    // (slice 를 정렬 뒤에 — 정원 초과분이 있어도 전 클라이언트가 같은 16명을 그림)
     const sorted = players
-      .slice(0, TABLES.length * SEATS_PER)
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .slice()
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(0, TABLES.length * SEATS_PER);
     const ambiance = sorted.length <= 1
       ? [{ id: '__amb1', name: '단골' }, { id: '__amb2', name: '책벌레' }]
       : [];
